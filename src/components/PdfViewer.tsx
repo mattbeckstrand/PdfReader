@@ -117,23 +117,39 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
 
       // Get viewport with calculated scale
       const scaledViewport = currentPageObject.getViewport({ scale: calculatedScale });
+
+      // High-DPI (Retina) display support
+      const dpr = window.devicePixelRatio || 1;
       console.log('📍 Viewport:', {
         width: scaledViewport.width,
         height: scaledViewport.height,
+        devicePixelRatio: dpr,
       });
 
-      // Set canvas dimensions (both actual and CSS)
-      canvas.width = scaledViewport.width;
-      canvas.height = scaledViewport.height;
+      // Set canvas INTERNAL dimensions for high-DPI rendering
+      // (multiply by device pixel ratio for crisp display on Retina screens)
+      canvas.width = scaledViewport.width * dpr;
+      canvas.height = scaledViewport.height * dpr;
+
+      // Set CSS dimensions to logical pixels (actual display size)
       canvas.style.width = `${scaledViewport.width}px`;
       canvas.style.height = `${scaledViewport.height}px`;
 
-      // Set text layer dimensions to match canvas
+      // Reset transform and scale the rendering context to match device pixel ratio
+      // (reset first to prevent compounding on re-renders)
+      context.setTransform(1, 0, 0, 1, 0, 0); // Reset to identity matrix
+      context.scale(dpr, dpr);
+
+      // Enable high-quality image smoothing for better rendering
+      context.imageSmoothingEnabled = true;
+      context.imageSmoothingQuality = 'high';
+
+      // Set text layer dimensions to match CSS size (logical pixels)
       textLayer.style.width = `${scaledViewport.width}px`;
       textLayer.style.height = `${scaledViewport.height}px`;
-      console.log('✅ Canvas and text layer dimensions set');
+      console.log('✅ Canvas and text layer dimensions set (high-DPI ready)');
 
-      // Render PDF page to canvas
+      // Render PDF page to canvas with high-DPI support
       const renderContext = {
         canvasContext: context,
         viewport: scaledViewport,
@@ -159,6 +175,7 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
         height: number;
       }>;
 
+      // Scale text layer positioning to match viewport scale
       textItems.forEach(item => {
         const span = document.createElement('span');
         span.textContent = item.str;
@@ -169,6 +186,7 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
           item.transform[0] * item.transform[0] + item.transform[1] * item.transform[1]
         )}px`;
         span.style.fontFamily = 'sans-serif';
+        span.style.whiteSpace = 'pre'; // Preserve spacing
         textLayer.appendChild(span);
       });
       console.log('✅ Text layer rendered');
