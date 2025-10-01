@@ -1,0 +1,254 @@
+# AI-Native PDF Reader - Cursor Rules
+
+## 🎯 Project Context
+You are building an AI-native PDF reader where the AI lives INSIDE the document, not in a sidebar.
+- MVP Focus: Highlight → Ask → Inline Answer
+- Tech: Electron + React + TypeScript + PDF.js + OpenAI
+- Design Philosophy: Embedded, context-aware, zero-friction
+
+## 📁 Code Organization
+
+### File Structure Principles
+- **Separation of Concerns**: Keep Electron (main/renderer) logic separate from React UI
+- **Feature-Based Organization**: Group related files by feature, not by type
+  ```
+  src/
+    features/
+      pdf-viewer/       # PDF rendering, navigation
+      ai-assistant/     # AI interaction, embeddings
+      highlighting/     # Text selection, highlight UI
+    shared/
+      components/       # Reusable UI components
+      hooks/           # Reusable React hooks
+      utils/           # Pure utility functions
+      types/           # Shared TypeScript types
+  ```
+
+### Naming Conventions
+- **Components**: PascalCase, descriptive nouns (e.g., `AnswerBubble`, `PdfViewer`)
+- **Hooks**: camelCase with `use` prefix (e.g., `useHighlight`, `usePdfContext`)
+- **Utilities**: camelCase, verb-based (e.g., `chunkText`, `embedDocument`)
+- **Types/Interfaces**: PascalCase with descriptive names (e.g., `PdfChunk`, `AiResponse`)
+- **Constants**: SCREAMING_SNAKE_CASE (e.g., `MAX_CHUNK_SIZE`, `DEFAULT_MODEL`)
+
+## 🔒 TypeScript Strictness
+
+### Type Safety Rules
+- **ALWAYS use explicit types**: No implicit `any` - enable `strict` mode
+- **Prefer interfaces over types** for object shapes (better for extension)
+- **Use type guards** for runtime type checking
+- **Export types alongside implementations**
+- **Generic types** for reusable components and hooks
+
+### Examples to Follow
+```typescript
+// ✅ GOOD: Explicit types, clear interfaces
+interface PdfChunk {
+  pageNumber: number;
+  text: string;
+  embedding?: number[];
+  boundingBox?: BoundingBox;
+}
+
+async function chunkDocument(pdfText: string, pageNum: number): Promise<PdfChunk[]> {
+  // Implementation
+}
+
+// ❌ BAD: Implicit any, unclear return type
+function chunkDocument(pdfText, pageNum) {
+  // Implementation
+}
+```
+
+## ⚛️ React Best Practices
+
+### Component Guidelines
+- **Functional components only** (no class components)
+- **One component per file** (except tiny sub-components)
+- **Props interfaces** must be defined and exported
+- **Destructure props** in function signature
+- **Use TypeScript for props**, not PropTypes
+
+### Hook Usage
+- **Custom hooks for logic reuse** (UI logic, API calls, state management)
+- **Keep hooks focused**: One concern per hook
+- **Name hooks clearly**: `useHighlight`, not `useSelection`
+- **Return objects, not arrays** for multi-value hooks (better readability)
+  ```typescript
+  // ✅ GOOD
+  const { highlightedText, clearSelection } = useHighlight();
+  
+  // ❌ BAD
+  const [highlightedText, clearSelection] = useHighlight();
+  ```
+
+### State Management
+- **useState** for local component state
+- **useContext** for shared state (e.g., PDF document context, AI config)
+- **No global state library yet** (keep MVP simple)
+- **Lift state only when necessary**
+
+## 🔌 Electron Patterns
+
+### IPC Communication
+- **Use contextBridge** in preload.ts for all main-renderer communication
+- **Type IPC channels** with string unions or enums
+- **One handler per logical action** (e.g., `pdf:open`, `ai:ask`)
+- **Always handle errors** in IPC handlers
+
+### Security First
+- **contextIsolation: true** (already set ✅)
+- **nodeIntegration: false** (already set ✅)
+- **Validate all input** from renderer process
+- **Never expose full Node.js APIs** to renderer
+
+### Example Pattern
+```typescript
+// preload.ts
+const api = {
+  openPdf: (filePath: string) => ipcRenderer.invoke('pdf:open', filePath),
+  askAI: (question: string, context: string[]) => 
+    ipcRenderer.invoke('ai:ask', { question, context })
+};
+contextBridge.exposeInMainWorld('electronAPI', api);
+
+// Types for renderer
+interface ElectronAPI {
+  openPdf: (filePath: string) => Promise<PdfDocument>;
+  askAI: (question: string, context: string[]) => Promise<string>;
+}
+```
+
+## 🤖 AI Integration Patterns
+
+### Error Handling
+- **Always wrap API calls** in try-catch
+- **Provide user-friendly error messages** (not raw API errors)
+- **Implement retry logic** for transient failures
+- **Rate limit awareness**: Handle 429 errors gracefully
+
+### Context Management
+- **Include relevant chunks only** (not entire document)
+- **Add metadata to prompts** (page number, section title)
+- **Track token usage** to stay within limits
+- **Cache embeddings** (don't re-embed on every question)
+
+### Streaming Responses (Future)
+- Structure code to easily add streaming later
+- Separate data fetching from UI updates
+- Use async generators or event emitters
+
+## 📄 PDF.js Integration
+
+### Rendering
+- **Load PDFs progressively** (don't block on full load)
+- **Viewport management**: Only render visible pages + buffer
+- **Text layer required**: For selection and highlighting
+- **Canvas cleanup**: Destroy old canvases to prevent memory leaks
+
+### Text Extraction
+- **Extract text page-by-page** (not all at once)
+- **Preserve text structure** (paragraphs, spacing)
+- **Handle special characters and encoding**
+- **Cache extracted text** per page
+
+## 🎨 UI/UX Patterns
+
+### In-Document Experience
+- **Inline, not sidebar**: Answers appear near highlights
+- **Non-blocking UI**: Loading states don't freeze the app
+- **Dismissible by default**: User controls what stays visible
+- **Keyboard shortcuts**: Power user experience (e.g., Cmd+K)
+
+### Performance
+- **Debounce expensive operations** (embeddings, vector search)
+- **Virtual scrolling** for long PDFs
+- **Lazy load components** not needed immediately
+- **Optimize re-renders**: Use React.memo, useMemo, useCallback wisely
+
+## 🧪 Code Quality
+
+### Before Every Commit
+- **No `console.log` in production code** (use proper logging utility)
+- **No commented-out code** (use git history)
+- **Remove unused imports** and variables
+- **Format code consistently** (use Prettier if available)
+
+### Comments and Documentation
+- **Comment WHY, not WHAT** (code should be self-documenting)
+- **JSDoc for public APIs** (exported functions, components)
+- **Inline comments for complex logic** (algorithms, edge cases)
+- **TODO comments with context**: `// TODO: Add pagination (issue #42)`
+
+### Error Messages
+- **User-facing**: Clear, actionable, non-technical
+- **Developer-facing**: Detailed, with context
+- **Never expose API keys or sensitive data** in errors
+
+## 🚫 Anti-Patterns to Avoid
+
+### Don't
+- ❌ Mix business logic in components (extract to hooks/utils)
+- ❌ Fetch data directly in components (use hooks)
+- ❌ Use `any` type (use `unknown` if truly unknown)
+- ❌ Mutate state directly (immutable updates only)
+- ❌ Over-optimize prematurely (make it work, then make it fast)
+- ❌ Create abstractions too early (wait for patterns to emerge)
+- ❌ Add features not in MVP scope (stay focused)
+
+### Do
+- ✅ Keep components small and focused
+- ✅ Extract reusable logic to hooks
+- ✅ Use TypeScript to catch errors at compile time
+- ✅ Think about the user experience first
+- ✅ Write code that's easy to delete (loose coupling)
+- ✅ Test complex logic manually as you build
+- ✅ Read the PDF.js and Electron docs when stuck
+
+## 🎯 MVP Scope Reminders
+
+### In Scope
+- Open PDF locally
+- Highlight text
+- Ask AI about highlighted text
+- Show answer inline
+- Vector search for context
+
+### Out of Scope (Don't Build Yet!)
+- Sidebar chat history
+- Notebook/summary view
+- Cloud sync
+- User accounts
+- Scroll tracking
+- Study mode
+- Multi-file support
+
+## 🔧 Development Workflow
+
+### When Adding a New Feature
+1. **Define types first** (interfaces, function signatures)
+2. **Build the smallest working version**
+3. **Test manually in the Electron app**
+4. **Refactor for clarity** (not performance)
+5. **Extract reusable logic** if pattern emerges
+
+### When Debugging
+1. **Check the Electron DevTools** (renderer process)
+2. **Check the main process logs** (terminal)
+3. **Verify IPC communication** (both directions)
+4. **Isolate the problem** (component, hook, or utility)
+5. **Check PDF.js worker** (separate thread)
+
+## 💡 Helpful Context for AI Assistant (Cursor)
+
+When you help me:
+- **Suggest complete, working code** (not pseudocode)
+- **Include imports and types** in suggestions
+- **Consider the Electron context** (main vs renderer)
+- **Think about the embedded UX** (inline, not sidebar)
+- **Prioritize simplicity** over cleverness
+- **Remind me if I'm scope creeping** (MVP only!)
+- **Ask for clarification** if the request is ambiguous
+
+Remember: This is an AI-native reader where AI lives IN the document. Every decision should support that core experience.
+
