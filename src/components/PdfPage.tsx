@@ -101,45 +101,71 @@ const PdfPage: React.FC<PdfPageProps> = ({
 
       // High-DPI (Retina) display support
       const dpr = window.devicePixelRatio || 1;
+      const outputScale = dpr;
 
-      // Set canvas dimensions
-      canvas.width = scaledViewport.width * dpr;
-      canvas.height = scaledViewport.height * dpr;
-      canvas.style.width = `${scaledViewport.width}px`;
-      canvas.style.height = `${scaledViewport.height}px`;
+      // Set canvas dimensions with proper scaling for crisp rendering
+      canvas.width = Math.floor(scaledViewport.width * outputScale);
+      canvas.height = Math.floor(scaledViewport.height * outputScale);
+      canvas.style.width = `${Math.floor(scaledViewport.width)}px`;
+      canvas.style.height = `${Math.floor(scaledViewport.height)}px`;
 
-      // Reset transform and scale for high-DPI
-      context.setTransform(1, 0, 0, 1, 0, 0);
-      context.scale(dpr, dpr);
+      // Apply the output scale for high-DPI displays
+      const transform = outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : null;
 
       // Enable high-quality rendering
       context.imageSmoothingEnabled = true;
       context.imageSmoothingQuality = 'high';
 
-      // Set text layer dimensions
-      textLayer.style.width = `${scaledViewport.width}px`;
-      textLayer.style.height = `${scaledViewport.height}px`;
+      // Set text layer dimensions to match canvas EXACTLY (using same floor values)
+      const exactWidth = Math.floor(scaledViewport.width);
+      const exactHeight = Math.floor(scaledViewport.height);
+
+      textLayer.style.width = `${exactWidth}px`;
+      textLayer.style.height = `${exactHeight}px`;
+      textLayer.style.left = '0px';
+      textLayer.style.top = '0px';
 
       // Render PDF page to canvas
-      const renderContext = {
+      const renderContext: any = {
         canvasContext: context,
         viewport: scaledViewport,
       };
+
+      if (transform) {
+        renderContext.transform = transform;
+      }
 
       await page.render(renderContext).promise;
 
       // Extract and render text layer for selection using PDF.js renderer
       const textContent = await page.getTextContent();
+
+      // Configure text layer rendering with maximum precision
       const textLayerRenderTask = (pdfjsLib as unknown as any).renderTextLayer({
-        textContent,
+        textContentSource: textContent,
         container: textLayer,
         viewport: scaledViewport,
         textDivs: [],
-        enhanceTextSelection: true,
+        textContentItemsStr: [],
+        enhanceTextSelection: true, // Improves text selection by adding extra divs
       });
+
       if (textLayerRenderTask && textLayerRenderTask.promise) {
         await textLayerRenderTask.promise;
       }
+
+      // Post-process text spans for perfect alignment
+      const spans = textLayer.querySelectorAll('span');
+      spans.forEach((span: HTMLSpanElement) => {
+        // Ensure spans don't interfere with each other
+        span.style.pointerEvents = 'auto';
+        span.style.userSelect = 'text';
+      });
+
+      // Add end-of-content marker for better text selection at document end
+      const endOfContent = document.createElement('div');
+      endOfContent.className = 'endOfContent';
+      textLayer.appendChild(endOfContent);
 
       setIsRendered(true);
       console.log(`✅ Page ${pageNumber} rendered successfully`);
@@ -293,14 +319,6 @@ const PdfPage: React.FC<PdfPageProps> = ({
         ref={textLayerRef}
         className="textLayer"
         style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          color: 'transparent',
-          transformOrigin: '0% 0%',
-          mixBlendMode: 'normal',
-          userSelect: 'text',
-          cursor: 'text',
           display: isRendered ? 'block' : 'none',
         }}
       />

@@ -49,7 +49,7 @@ interface UsePdfDocumentResult {
   error: string | null;
 
   // Actions
-  loadPdf: (file: File) => Promise<void>;
+  loadPdf: (file: File, filePathToStore?: string) => Promise<void>;
   setCurrentPage: (pageNum: number) => void;
 
   // For rendering
@@ -128,7 +128,7 @@ export function usePdfDocument(): UsePdfDocumentResult {
    * Creates PDF.js document proxy, extracts metadata, and loads all pages
    */
   const loadPdf = useCallback(
-    async (file: File) => {
+    async (file: File, filePathToStore?: string) => {
       console.log('📂 Loading PDF file:', {
         name: file.name,
         size: file.size,
@@ -236,6 +236,12 @@ export function usePdfDocument(): UsePdfDocumentResult {
         setAllPageObjects(pages);
         allPageObjectsRef.current = pages;
         console.log('🎉 PDF loading completed successfully!');
+
+        // Store file path for persistence (only if we have a real file path)
+        if (filePathToStore) {
+          console.log('💾 Storing PDF path for persistence:', filePathToStore);
+          localStorage.setItem('lastPdfPath', filePathToStore);
+        }
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : ERROR_MESSAGES.PDF_LOAD_FAILED;
         setError(errorMessage);
@@ -250,6 +256,67 @@ export function usePdfDocument(): UsePdfDocumentResult {
     },
     [loadAllPages]
   );
+
+  // ===================================================================
+  // Auto-load from localStorage
+  // ===================================================================
+
+  /**
+   * On mount, check if there's a stored PDF path and reload it
+   * This enables persistence across app refreshes
+   */
+  useEffect(() => {
+    const loadStoredPdf = async () => {
+      // Only try to load if we have the Electron API available
+      if (!window.electronAPI?.file?.read) {
+        console.log('⚠️ Electron file API not available, skipping auto-load');
+        return;
+      }
+
+      const storedPath = localStorage.getItem('lastPdfPath');
+      if (!storedPath) {
+        console.log('ℹ️ No stored PDF path found');
+        return;
+      }
+
+      console.log('🔄 Attempting to reload last PDF:', storedPath);
+      setLoading(true);
+
+      try {
+        // Use Electron API to read the file
+        const result = await window.electronAPI.file.read(storedPath);
+
+        if (!result.success || !result.data || !result.name) {
+          console.warn('⚠️ Failed to read stored PDF:', result.error);
+          setError(`Could not reload previous PDF: ${result.error || 'File not found'}`);
+          // Clear the stored path since it's no longer valid
+          localStorage.removeItem('lastPdfPath');
+          setLoading(false);
+          return;
+        }
+
+        // Convert Uint8Array to File object
+        const blob = new Blob([result.data], { type: 'application/pdf' });
+        const file = new File([blob], result.name, { type: 'application/pdf' });
+
+        console.log('✅ Reloaded PDF file from storage:', {
+          name: result.name,
+          size: result.data.length,
+          path: storedPath,
+        });
+
+        // Load the PDF (don't pass filePathToStore since it's already stored)
+        await loadPdf(file);
+      } catch (err) {
+        console.error('❌ Failed to reload stored PDF:', err);
+        setError('Could not reload previous PDF');
+        localStorage.removeItem('lastPdfPath');
+        setLoading(false);
+      }
+    };
+
+    loadStoredPdf();
+  }, []); // Run once on mount
 
   // ===================================================================
   // Cleanup

@@ -2,11 +2,12 @@
   "name": "pdf-ai-reader",
   "version": "0.1.0",
   "type": "module",
-  "main": "electron/main.ts",
+  "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "electron:dev": "VITE_DEV_SERVER_URL=http://localhost:5173 electron .",
+    "electron:compile": "tsc -p tsconfig.electron.json",
+    "electron:dev": "npm run electron:compile && VITE_DEV_SERVER_URL=http://localhost:5173 electron ./dist-electron/main.js",
     "electron:build": "electron-builder"
   },
   "dependencies": {
@@ -21,6 +22,7 @@
     "@vitejs/plugin-react": "^4.0.0",
     "electron": "^38.2.0",
     "electron-builder": "^26.0.12",
+    "tsx": "^4.20.6",
     "typescript": "^5.0.0",
     "vite": "^5.0.0"
   }

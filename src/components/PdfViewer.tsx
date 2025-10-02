@@ -16,7 +16,7 @@ interface PdfViewerProps {
   totalPages: number;
   loading: boolean;
   error: string | null;
-  onLoadPdf: (file: File) => Promise<void>;
+  onLoadPdf: (file: File, filePathToStore?: string) => Promise<void>;
   onSetCurrentPage: (pageNum: number) => void;
 }
 
@@ -101,7 +101,10 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
     async (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
       if (file && file.type === 'application/pdf') {
-        await onLoadPdf(file);
+        // In Electron, File objects have a 'path' property with the full file path
+        const filePath = (file as any).path;
+        console.log('📁 Selected file:', { name: file.name, path: filePath });
+        await onLoadPdf(file, filePath);
       } else {
         alert('Please select a valid PDF file');
       }
@@ -493,22 +496,58 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
           100% { transform: rotate(360deg); }
         }
 
-        /* Text layer styles - transparent spans for text selection */
-        .textLayer > span {
+        /* Beautiful text selection color */
+        .textLayer ::selection {
+          background: rgba(0, 123, 255, 0.35);
+          color: transparent;
+        }
+
+        .textLayer ::-moz-selection {
+          background: rgba(0, 123, 255, 0.35);
+          color: transparent;
+        }
+
+        /* Text layer must be positioned exactly */
+        .textLayer {
+          position: absolute;
+          left: 0;
+          top: 0;
+          right: 0;
+          bottom: 0;
+          overflow: hidden;
+          opacity: 1;
+          line-height: 1.0;
+          cursor: text;
+          z-index: 2;
+          -webkit-font-smoothing: antialiased;
+          -moz-osx-font-smoothing: grayscale;
+        }
+
+        /* Ensure text spans are properly constrained */
+        .textLayer span {
           color: transparent;
           position: absolute;
           white-space: pre;
           cursor: text;
           transform-origin: 0% 0%;
-          line-height: 1;
         }
 
-        /* Highlight style for selected text */
-        .textLayer .highlight {
-          margin: -1px;
-          padding: 1px;
-          background-color: rgba(180, 0, 170, 0.2);
-          border-radius: 4px;
+        /* Prevent line breaks from affecting layout */
+        .textLayer br {
+          display: none;
+        }
+
+        /* End of content marker */
+        .textLayer .endOfContent {
+          display: block;
+          position: absolute;
+          left: 0;
+          top: 100%;
+          right: 0;
+          bottom: 0;
+          z-index: -1;
+          cursor: default;
+          user-select: none;
         }
       `}</style>
     </div>
