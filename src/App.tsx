@@ -2,8 +2,8 @@ import React, { useCallback, useEffect, useState } from 'react';
 import ChatSidebar, { Message } from './components/ChatSidebar';
 import HighlightActionMenu from './components/HighlightActionMenu';
 import PdfViewer from './components/PdfViewer';
-import { useAskAI } from './hooks/useAskAI';
 import { useHighlight } from './hooks/useHighlight';
+import { usePdfContext } from './hooks/usePdfContext';
 import { usePdfDocument } from './hooks/usePdfDocument';
 
 // ===================================================================
@@ -24,11 +24,21 @@ const App: React.FC = () => {
     setCurrentPage,
     pdfDocument,
     allPageObjects,
+    document: pdfDocumentData,
+    originalFile,
   } = usePdfDocument();
 
   const { highlightedText, selectionPosition, captureSelection, clearSelection } = useHighlight();
 
-  const { ask, loading: aiLoading, answer, error: aiError, clearAnswer } = useAskAI();
+  const {
+    initializeContext,
+    ask: askWithContext,
+    clearContext,
+    contextInitialized,
+    isUploading,
+    loading: aiLoading,
+    error: aiError,
+  } = usePdfContext();
 
   // ===================================================================
   // State
@@ -37,6 +47,39 @@ const App: React.FC = () => {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [currentContext, setCurrentContext] = useState<string>('');
+  const [latestAnswer, setLatestAnswer] = useState<string | null>(null);
+
+  // ===================================================================
+  // Initialize PDF Context (Upload to Gemini)
+  // ===================================================================
+
+  /**
+   * When PDF loads, upload it to Gemini for full document context
+   */
+  useEffect(() => {
+    if (originalFile && pdfDocumentData && !contextInitialized && !isUploading) {
+      console.log('🚀 PDF loaded, initializing AI context...');
+      initializeContext(originalFile, {
+        title: pdfDocumentData.title,
+        pages: pdfDocumentData.numPages,
+        author: pdfDocumentData.metadata?.author,
+      }).catch(err => {
+        console.error('Failed to initialize PDF context:', err);
+      });
+    }
+  }, [originalFile, pdfDocumentData, contextInitialized, isUploading, initializeContext]);
+
+  /**
+   * Cleanup: Clear context when component unmounts or PDF changes
+   */
+  useEffect(() => {
+    return () => {
+      if (contextInitialized) {
+        console.log('🧹 Component unmounting, clearing PDF context');
+        clearContext().catch(err => console.error('Failed to clear context:', err));
+      }
+    };
+  }, [contextInitialized, clearContext]);
 
   // ===================================================================
   // Text Selection Handler
@@ -65,17 +108,17 @@ const App: React.FC = () => {
    * When AI returns an answer, add it to messages
    */
   useEffect(() => {
-    if (answer) {
+    if (latestAnswer) {
       const newMessage: Message = {
         id: Date.now().toString(),
         role: 'assistant',
-        content: answer,
+        content: latestAnswer,
         timestamp: new Date(),
       };
       setMessages(prev => [...prev, newMessage]);
-      clearAnswer();
+      setLatestAnswer(null);
     }
-  }, [answer, clearAnswer]);
+  }, [latestAnswer]);
 
   /**
    * Handle AI errors by adding error message to chat
@@ -100,7 +143,12 @@ const App: React.FC = () => {
    * Handle "Explain This" action
    */
   const handleExplain = useCallback(() => {
-    if (!highlightedText) return;
+    if (!highlightedText || !contextInitialized) {
+      if (!contextInitialized) {
+        alert('Please wait for the PDF to be processed by AI...');
+      }
+      return;
+    }
 
     // Store context for follow-up questions
     setCurrentContext(highlightedText);
@@ -117,18 +165,33 @@ const App: React.FC = () => {
     // Open chat sidebar
     setIsChatOpen(true);
 
-    // Ask AI
-    ask(`Explain this text in simple terms: "${highlightedText}"`, highlightedText, currentPage);
+    // Ask AI with full PDF context
+    askWithContext(
+      `Explain this text in simple terms: "${highlightedText}"`,
+      highlightedText,
+      currentPage
+    )
+      .then(answer => {
+        setLatestAnswer(answer);
+      })
+      .catch(err => {
+        console.error('Failed to get AI response:', err);
+      });
 
     // Clear selection
     clearSelection();
-  }, [highlightedText, currentPage, ask, clearSelection]);
+  }, [highlightedText, currentPage, askWithContext, clearSelection, contextInitialized]);
 
   /**
    * Handle "Ask AI" action
    */
   const handleAskAI = useCallback(() => {
-    if (!highlightedText) return;
+    if (!highlightedText || !contextInitialized) {
+      if (!contextInitialized) {
+        alert('Please wait for the PDF to be processed by AI...');
+      }
+      return;
+    }
 
     // Store context
     setCurrentContext(highlightedText);
@@ -156,13 +219,18 @@ const App: React.FC = () => {
 
     // Clear selection
     clearSelection();
-  }, [highlightedText, clearSelection]);
+  }, [highlightedText, clearSelection, contextInitialized]);
 
   /**
    * Handle "Define" action
    */
   const handleDefine = useCallback(() => {
-    if (!highlightedText) return;
+    if (!highlightedText || !contextInitialized) {
+      if (!contextInitialized) {
+        alert('Please wait for the PDF to be processed by AI...');
+      }
+      return;
+    }
 
     // Store context
     setCurrentContext(highlightedText);
@@ -179,12 +247,22 @@ const App: React.FC = () => {
     // Open chat sidebar
     setIsChatOpen(true);
 
-    // Ask for definition
-    ask(`Provide a clear definition of: "${highlightedText}"`, highlightedText, currentPage);
+    // Ask for definition with full PDF context
+    askWithContext(
+      `Provide a clear definition of: "${highlightedText}"`,
+      highlightedText,
+      currentPage
+    )
+      .then(answer => {
+        setLatestAnswer(answer);
+      })
+      .catch(err => {
+        console.error('Failed to get AI response:', err);
+      });
 
     // Clear selection
     clearSelection();
-  }, [highlightedText, currentPage, ask, clearSelection]);
+  }, [highlightedText, currentPage, askWithContext, clearSelection, contextInitialized]);
 
   /**
    * Handle "Annotate" action
@@ -204,6 +282,11 @@ const App: React.FC = () => {
    */
   const handleSendMessage = useCallback(
     (message: string) => {
+      if (!contextInitialized) {
+        alert('Please wait for the PDF to be processed by AI...');
+        return;
+      }
+
       // Add user message
       const userMessage: Message = {
         id: Date.now().toString(),
@@ -213,10 +296,16 @@ const App: React.FC = () => {
       };
       setMessages(prev => [...prev, userMessage]);
 
-      // Ask AI with context
-      ask(message, currentContext, currentPage);
+      // Ask AI with full PDF context
+      askWithContext(message, currentContext, currentPage)
+        .then(answer => {
+          setLatestAnswer(answer);
+        })
+        .catch(err => {
+          console.error('Failed to get AI response:', err);
+        });
     },
-    [currentContext, currentPage, ask]
+    [currentContext, currentPage, askWithContext, contextInitialized]
   );
 
   /**
@@ -249,6 +338,75 @@ const App: React.FC = () => {
         onLoadPdf={loadPdf}
         onSetCurrentPage={setCurrentPage}
       />
+
+      {/* PDF Upload Progress Indicator */}
+      {isUploading && (
+        <div
+          style={{
+            position: 'fixed',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            backgroundColor: 'rgba(0, 0, 0, 0.9)',
+            color: 'white',
+            padding: '30px 40px',
+            borderRadius: '12px',
+            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.3)',
+            zIndex: 1000,
+            textAlign: 'center',
+            minWidth: '300px',
+          }}
+        >
+          <div
+            style={{
+              width: '40px',
+              height: '40px',
+              border: '4px solid rgba(255, 255, 255, 0.3)',
+              borderTop: '4px solid white',
+              borderRadius: '50%',
+              margin: '0 auto 20px',
+              animation: 'spin 1s linear infinite',
+            }}
+          />
+          <h3 style={{ margin: '0 0 10px', fontSize: '18px', fontWeight: 600 }}>
+            Preparing PDF for AI...
+          </h3>
+          <p style={{ margin: 0, fontSize: '14px', color: 'rgba(255, 255, 255, 0.8)' }}>
+            Enabling full document understanding with vision
+          </p>
+          <style>{`
+            @keyframes spin {
+              0% { transform: rotate(0deg); }
+              100% { transform: rotate(360deg); }
+            }
+          `}</style>
+        </div>
+      )}
+
+      {/* Context Ready Indicator */}
+      {contextInitialized && !isUploading && pdfDocument && (
+        <div
+          style={{
+            position: 'fixed',
+            top: '20px',
+            right: '20px',
+            backgroundColor: '#10b981',
+            color: 'white',
+            padding: '12px 20px',
+            borderRadius: '8px',
+            boxShadow: '0 2px 10px rgba(16, 185, 129, 0.3)',
+            zIndex: 999,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            fontSize: '14px',
+            fontWeight: 500,
+          }}
+        >
+          <span style={{ fontSize: '18px' }}>✓</span>
+          <span>AI has full document context</span>
+        </div>
+      )}
 
       {/* Highlight Action Menu */}
       {highlightedText && selectionPosition && (
