@@ -49,6 +49,7 @@ const App: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [currentContext, setCurrentContext] = useState<string>('');
   const [latestAnswer, setLatestAnswer] = useState<string | null>(null);
+  const [contextPreview, setContextPreview] = useState<string>(''); // For showing context in input area
 
   // ===================================================================
   // Initialize PDF Context (Upload to Gemini)
@@ -170,11 +171,13 @@ const App: React.FC = () => {
     // Store context for follow-up questions
     setCurrentContext(highlightedText);
 
-    // Add user message to chat
+    // Add user message to chat with shortened context preview
+    const preview =
+      highlightedText.length > 60 ? `${highlightedText.substring(0, 60)}...` : highlightedText;
     const userMessage: Message = {
       id: Date.now().toString(),
       role: 'user',
-      content: `Explain this: "${highlightedText}"`,
+      content: `📄 Context: "${preview}"\n\nExplain this`,
       timestamp: new Date(),
     };
     setMessages(prev => [...prev, userMessage]);
@@ -213,26 +216,13 @@ const App: React.FC = () => {
     // Store context
     setCurrentContext(highlightedText);
 
-    // Open chat sidebar with context
+    // Set context preview for input area
+    const preview =
+      highlightedText.length > 60 ? `${highlightedText.substring(0, 60)}...` : highlightedText;
+    setContextPreview(preview);
+
+    // Open chat sidebar (no messages added - context shown in input area)
     setIsChatOpen(true);
-
-    // Add context message to chat
-    const contextMessage: Message = {
-      id: Date.now().toString(),
-      role: 'user',
-      content: `Context: "${highlightedText}"`,
-      timestamp: new Date(),
-    };
-    setMessages(prev => [...prev, contextMessage]);
-
-    // Add prompt message
-    const promptMessage: Message = {
-      id: (Date.now() + 1).toString(),
-      role: 'assistant',
-      content: 'What would you like to know about this text?',
-      timestamp: new Date(),
-    };
-    setMessages(prev => [...prev, promptMessage]);
 
     // Clear selection
     clearSelection();
@@ -252,11 +242,13 @@ const App: React.FC = () => {
     // Store context
     setCurrentContext(highlightedText);
 
-    // Add user message
+    // Add user message with shortened context preview
+    const preview =
+      highlightedText.length > 60 ? `${highlightedText.substring(0, 60)}...` : highlightedText;
     const userMessage: Message = {
       id: Date.now().toString(),
       role: 'user',
-      content: `Define: "${highlightedText}"`,
+      content: `📄 Context: "${preview}"\n\nDefine this`,
       timestamp: new Date(),
     };
     setMessages(prev => [...prev, userMessage]);
@@ -313,6 +305,9 @@ const App: React.FC = () => {
       };
       setMessages(prev => [...prev, userMessage]);
 
+      // Clear context preview after first message is sent
+      setContextPreview('');
+
       // Ask AI with full PDF context
       askWithContext(message, currentContext, currentPage)
         .then(answer => {
@@ -330,6 +325,7 @@ const App: React.FC = () => {
    */
   const handleCloseChat = useCallback(() => {
     setIsChatOpen(false);
+    setContextPreview(''); // Clear context preview when closing
   }, []);
 
   /**
@@ -375,7 +371,7 @@ const App: React.FC = () => {
             border: '1px solid #333',
             color: '#888',
             padding: '30px 40px',
-            borderRadius: '2px',
+            borderRadius: '12px',
             boxShadow: '0 4px 20px rgba(0, 0, 0, 0.5)',
             zIndex: 1000,
             textAlign: 'center',
@@ -424,7 +420,7 @@ const App: React.FC = () => {
             border: '1px solid #333',
             color: isChatOpen ? '#fff' : '#888',
             padding: '0',
-            borderRadius: '2px',
+            borderRadius: '10px',
             boxShadow: '0 2px 10px rgba(0, 0, 0, 0.3)',
             zIndex: 999,
             display: 'flex',
@@ -471,6 +467,7 @@ const App: React.FC = () => {
         messages={messages}
         onSendMessage={handleSendMessage}
         isLoading={aiLoading}
+        contextPreview={contextPreview}
       />
     </div>
   );

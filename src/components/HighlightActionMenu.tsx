@@ -101,7 +101,7 @@ const HighlightActionMenu: React.FC<HighlightActionMenuProps> = ({
           style={{
             backgroundColor: '#0a0a0a',
             border: '1px solid #333',
-            borderRadius: '2px',
+            borderRadius: '10px',
             boxShadow: '0 4px 20px rgba(0, 0, 0, 0.5)',
             display: 'flex',
             gap: '1px',
