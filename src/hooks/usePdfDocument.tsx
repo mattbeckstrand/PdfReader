@@ -54,6 +54,9 @@ interface UsePdfDocumentResult {
 
   // For rendering
   pdfDocument: PDFDocumentProxy | null;
+
+  // Original file (for File API upload)
+  originalFile: File | null;
 }
 
 // ===================================================================
@@ -85,6 +88,9 @@ export function usePdfDocument(): UsePdfDocumentResult {
   // PDF.js proxy objects
   const [pdfDocument, setPdfDocument] = useState<PDFDocumentProxy | null>(null);
   const [allPageObjects, setAllPageObjects] = useState<PDFPageProxy[]>([]);
+
+  // Original file (for File API upload to Gemini)
+  const [originalFile, setOriginalFile] = useState<File | null>(null);
 
   // Refs for cleanup (to avoid stale closures)
   const pdfDocumentRef = useRef<PDFDocumentProxy | null>(null);
@@ -143,6 +149,9 @@ export function usePdfDocument(): UsePdfDocumentResult {
       setPdfDocument(null);
       setAllPageObjects([]);
       setCurrentPage(1);
+
+      // Store original file for File API
+      setOriginalFile(file);
 
       try {
         // Convert File to ArrayBuffer for PDF.js
@@ -374,5 +383,8 @@ export function usePdfDocument(): UsePdfDocumentResult {
 
     // For rendering
     pdfDocument,
+
+    // Original file (for File API upload)
+    originalFile,
   };
 }

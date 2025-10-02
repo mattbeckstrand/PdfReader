@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
 
 // ===================================================================
 // Type Definitions
@@ -224,7 +225,112 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({
                   wordWrap: 'break-word',
                 }}
               >
-                {message.content}
+                {message.role === 'assistant' ? (
+                  <ReactMarkdown
+                    components={{
+                      // Style headings
+                      h1: ({ node, ...props }) => (
+                        <h1
+                          style={{
+                            fontSize: '18px',
+                            fontWeight: 'bold',
+                            marginTop: '12px',
+                            marginBottom: '8px',
+                          }}
+                          {...props}
+                        />
+                      ),
+                      h2: ({ node, ...props }) => (
+                        <h2
+                          style={{
+                            fontSize: '16px',
+                            fontWeight: 'bold',
+                            marginTop: '10px',
+                            marginBottom: '6px',
+                          }}
+                          {...props}
+                        />
+                      ),
+                      h3: ({ node, ...props }) => (
+                        <h3
+                          style={{
+                            fontSize: '14px',
+                            fontWeight: 'bold',
+                            marginTop: '8px',
+                            marginBottom: '4px',
+                          }}
+                          {...props}
+                        />
+                      ),
+                      // Style lists
+                      ul: ({ node, ...props }) => (
+                        <ul
+                          style={{ marginLeft: '20px', marginTop: '8px', marginBottom: '8px' }}
+                          {...props}
+                        />
+                      ),
+                      ol: ({ node, ...props }) => (
+                        <ol
+                          style={{ marginLeft: '20px', marginTop: '8px', marginBottom: '8px' }}
+                          {...props}
+                        />
+                      ),
+                      li: ({ node, ...props }) => <li style={{ marginBottom: '4px' }} {...props} />,
+                      // Style paragraphs
+                      p: ({ node, ...props }) => (
+                        <p style={{ marginTop: '8px', marginBottom: '8px' }} {...props} />
+                      ),
+                      // Style code blocks
+                      code: ({ node, inline, ...props }) =>
+                        inline ? (
+                          <code
+                            style={{
+                              backgroundColor: 'rgba(0,0,0,0.1)',
+                              padding: '2px 4px',
+                              borderRadius: '3px',
+                              fontSize: '13px',
+                            }}
+                            {...props}
+                          />
+                        ) : (
+                          <code
+                            style={{
+                              display: 'block',
+                              backgroundColor: 'rgba(0,0,0,0.1)',
+                              padding: '8px',
+                              borderRadius: '4px',
+                              fontSize: '13px',
+                              overflowX: 'auto',
+                              marginTop: '8px',
+                              marginBottom: '8px',
+                            }}
+                            {...props}
+                          />
+                        ),
+                      // Style strong/bold
+                      strong: ({ node, ...props }) => (
+                        <strong style={{ fontWeight: '600' }} {...props} />
+                      ),
+                      // Style blockquotes
+                      blockquote: ({ node, ...props }) => (
+                        <blockquote
+                          style={{
+                            borderLeft: '3px solid #ddd',
+                            paddingLeft: '12px',
+                            marginLeft: '0',
+                            fontStyle: 'italic',
+                            color: '#666',
+                          }}
+                          {...props}
+                        />
+                      ),
+                    }}
+                  >
+                    {message.content}
+                  </ReactMarkdown>
+                ) : (
+                  message.content
+                )}
               </div>
               <span
                 style={{

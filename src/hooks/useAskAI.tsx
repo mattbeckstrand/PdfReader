@@ -41,19 +41,28 @@ export function useAskAI(): UseAskAIResult {
         },
       });
 
-      // Build the prompt
-      const prompt = `You are helping someone read a PDF document. They highlighted some text and have a question about it.
+      // Build the prompt using advanced prompt engineering techniques
+      const prompt = `You are a concise reading assistant helping someone understand a PDF document.
 
-Context from the document:
+CONTEXT (Page ${pageNumber || '?'}):
 """
 ${context}
 """
 
-Question: ${question}
+QUESTION: ${question}
 
-Provide a clear, concise answer based on the context above.${
-        pageNumber ? ` (This is from page ${pageNumber})` : ''
-      }`;
+INSTRUCTIONS:
+- Answer directly and concisely (2-4 sentences max for simple questions)
+- Use markdown formatting for clarity:
+  * **Bold** key terms and important points
+  * Use bullet lists for 3+ items
+  * Use numbered lists ONLY for sequential steps
+  * Use "##" headings ONLY if breaking into multiple sections
+- Stay focused on the question - don't add unnecessary background
+- Reference the context specifically when relevant
+- If the context doesn't contain the answer, say so clearly
+
+Your answer:`;
 
       // Get response from Gemini
       const result = await model.generateContent(prompt);
@@ -66,7 +75,7 @@ Provide a clear, concise answer based on the context above.${
 
       setAnswer(answerText);
     } catch (err) {
-      let errorMessage = ERROR_MESSAGES.AI_REQUEST_FAILED;
+      let errorMessage: string = ERROR_MESSAGES.AI_REQUEST_FAILED;
 
       if (err instanceof Error) {
         // Handle specific Gemini errors
