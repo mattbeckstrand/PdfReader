@@ -18,6 +18,7 @@ interface PdfViewerProps {
   error: string | null;
   onLoadPdf: (file: File, filePathToStore?: string) => Promise<void>;
   onSetCurrentPage: (pageNum: number) => void;
+  onCanvasReady?: (pageNum: number, canvas: HTMLCanvasElement | null, scaleFactor?: number) => void;
 }
 
 // ===================================================================
@@ -45,6 +46,7 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
   error,
   onLoadPdf,
   onSetCurrentPage,
+  onCanvasReady,
 }) => {
   const MAX_PAGE_WIDTH = 900; // Keep in sync with wrapper style below
   // ===================================================================
@@ -610,6 +612,7 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
                 containerWidth={containerWidth}
                 onPageRef={handlePageRef}
                 onVisibilityChange={handlePageVisibilityChange}
+                onCanvasReady={onCanvasReady}
               />
             ))}
           </div>
@@ -635,6 +638,52 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
         .textLayer ::-moz-selection {
           background: rgba(0, 0, 0, 0.15);
           color: transparent;
+        }
+
+        /* Math mode selection - purple highlight for mathematical content */
+        .textLayer.math-mode ::selection {
+          background: rgba(139, 92, 246, 0.2);
+          color: transparent;
+        }
+
+        .textLayer.math-mode ::-moz-selection {
+          background: rgba(139, 92, 246, 0.2);
+          color: transparent;
+        }
+
+        /* Math content indicator - subtle glow for detected math spans */
+        .textLayer span.math-detected {
+          box-shadow: 0 0 2px rgba(139, 92, 246, 0.4);
+          border-radius: 2px;
+        }
+
+        /* Math region highlight - for auto-expanded selections */
+        .textLayer .math-region-highlight {
+          background: linear-gradient(90deg, 
+            rgba(139, 92, 246, 0.1) 0%, 
+            rgba(139, 92, 246, 0.05) 50%, 
+            rgba(139, 92, 246, 0.1) 100%);
+          border: 1px solid rgba(139, 92, 246, 0.3);
+          border-radius: 4px;
+          position: absolute;
+          pointer-events: none;
+          animation: mathHighlightPulse 1.5s ease-in-out;
+        }
+
+        /* Subtle animation for math detection */
+        @keyframes mathHighlightPulse {
+          0% { 
+            background: rgba(139, 92, 246, 0.2);
+            transform: scale(1.02);
+          }
+          50% { 
+            background: rgba(139, 92, 246, 0.1);
+            transform: scale(1);
+          }
+          100% { 
+            background: rgba(139, 92, 246, 0.05);
+            transform: scale(1);
+          }
         }
 
         /* Text layer must be positioned exactly */
