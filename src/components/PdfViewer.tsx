@@ -523,13 +523,29 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
           -moz-osx-font-smoothing: grayscale;
         }
 
-        /* Ensure text spans are properly constrained */
-        .textLayer span {
-          color: transparent;
+        /* Ensure ALL text elements (spans and divs) are properly styled */
+        .textLayer span,
+        .textLayer div:not(.endOfContent) {
+          color: transparent !important;
           position: absolute;
           white-space: pre;
           cursor: text;
           transform-origin: 0% 0%;
+          user-select: text;
+          -webkit-user-select: text;
+          -moz-user-select: text;
+          pointer-events: auto;
+        }
+
+        /* Ensure bold text, headers, and all font variations are selectable */
+        .textLayer span[style*="font-weight"],
+        .textLayer span[style*="font-size"],
+        .textLayer span[style*="font-family"] {
+          color: transparent !important;
+          cursor: text;
+          user-select: text;
+          -webkit-user-select: text;
+          -moz-user-select: text;
         }
 
         /* Prevent line breaks from affecting layout */

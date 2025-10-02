@@ -138,7 +138,11 @@ const PdfPage: React.FC<PdfPageProps> = ({
       await page.render(renderContext).promise;
 
       // Extract and render text layer for selection using PDF.js renderer
-      const textContent = await page.getTextContent();
+      // Use normalizeWhitespace: false to preserve formatting like headers, bold text, etc.
+      const textContent = await page.getTextContent({
+        normalizeWhitespace: false,
+        disableCombineTextItems: false,
+      });
 
       // Configure text layer rendering with maximum precision
       const textLayerRenderTask = (pdfjsLib as unknown as any).renderTextLayer({
@@ -147,19 +151,29 @@ const PdfPage: React.FC<PdfPageProps> = ({
         viewport: scaledViewport,
         textDivs: [],
         textContentItemsStr: [],
-        enhanceTextSelection: true, // Improves text selection by adding extra divs
+        enhanceTextSelection: true, // Critical: adds extra divs for better text selection
       });
 
       if (textLayerRenderTask && textLayerRenderTask.promise) {
         await textLayerRenderTask.promise;
       }
 
-      // Post-process text spans for perfect alignment
-      const spans = textLayer.querySelectorAll('span');
-      spans.forEach((span: HTMLSpanElement) => {
-        // Ensure spans don't interfere with each other
-        span.style.pointerEvents = 'auto';
-        span.style.userSelect = 'text';
+      // Post-process ALL text elements (spans, divs) for perfect alignment and selectability
+      const textElements = textLayer.querySelectorAll('span, div:not(.endOfContent)');
+      textElements.forEach((element: HTMLElement) => {
+        // Ensure ALL text elements are selectable regardless of styling
+        element.style.pointerEvents = 'auto';
+        element.style.userSelect = 'text';
+        element.style.WebkitUserSelect = 'text';
+        element.style.MozUserSelect = 'text';
+
+        // Ensure proper cursor for all text
+        element.style.cursor = 'text';
+
+        // Make sure all text is transparent (so we see the rendered PDF behind it)
+        if (!element.style.color || element.style.color !== 'transparent') {
+          element.style.color = 'transparent';
+        }
       });
 
       // Add end-of-content marker for better text selection at document end
