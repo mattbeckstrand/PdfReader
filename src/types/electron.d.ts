@@ -7,6 +7,14 @@
 
 import type { AiAnswer, PdfDocument, PdfPage, VectorSearchResult } from './index';
 
+export interface FileReadResult {
+  success: boolean;
+  data?: Uint8Array;
+  name?: string;
+  path?: string;
+  error?: string;
+}
+
 export interface ElectronAPI {
   // PDF operations
   pdf: {
@@ -26,6 +34,11 @@ export interface ElectronAPI {
   settings: {
     get: <T>(key: string) => Promise<T | null>;
     set: <T>(key: string, value: T) => Promise<void>;
+  };
+
+  // File system operations
+  file: {
+    read: (filePath: string) => Promise<FileReadResult>;
   };
 
   // System

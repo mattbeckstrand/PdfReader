@@ -14,8 +14,15 @@ interface ImportMetaEnv {
   readonly SSR: boolean;
   readonly MODE: string;
   readonly BASE_URL: string;
-  // Add custom env variables here if needed
-  // readonly VITE_CUSTOM_VAR: string;
+
+  // Google Gemini API Configuration
+  readonly VITE_GEMINI_API_KEY: string;
+  readonly VITE_GEMINI_MODEL?: string;
+  readonly VITE_GEMINI_PRO_MODEL?: string;
+
+  // AI Configuration (Optional)
+  readonly VITE_AI_TEMPERATURE?: string;
+  readonly VITE_AI_MAX_TOKENS?: string;
 }
 
 interface ImportMeta {
