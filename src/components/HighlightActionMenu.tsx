@@ -63,6 +63,13 @@ const HighlightActionMenu: React.FC<HighlightActionMenuProps> = ({
   // Render
   // ===================================================================
 
+  const actions = [
+    { label: 'Explain', onClick: onExplain },
+    { label: 'Ask AI', onClick: onAskAI },
+    { label: 'Define', onClick: onDefine },
+    { label: 'Annotate', onClick: onAnnotate },
+  ];
+
   return (
     <>
       {/* Backdrop - click to close */}
@@ -84,173 +91,52 @@ const HighlightActionMenu: React.FC<HighlightActionMenuProps> = ({
           position: 'fixed',
           top: `${position.y}px`,
           left: `${position.x}px`,
-          transform: 'translate(-50%, calc(-100% - 12px))',
-          backgroundColor: 'white',
-          borderRadius: '10px',
-          boxShadow: '0 4px 20px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.05)',
-          padding: '6px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '4px',
+          transform: 'translate(-50%, calc(-100% - 10px))',
           zIndex: 1000,
-          minWidth: '280px',
         }}
-        onClick={e => e.stopPropagation()} // Prevent closing when clicking inside menu
+        onClick={e => e.stopPropagation()}
       >
-        {/* Close button - top right, very visible */}
-        <button
-          onClick={onClose}
-          style={{
-            position: 'absolute',
-            top: '-8px',
-            right: '-8px',
-            width: '24px',
-            height: '24px',
-            borderRadius: '50%',
-            backgroundColor: '#ff4444',
-            color: 'white',
-            border: '2px solid white',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '14px',
-            fontWeight: 'bold',
-            boxShadow: '0 2px 8px rgba(255, 68, 68, 0.4)',
-            transition: 'all 0.2s',
-            zIndex: 1001,
-          }}
-          onMouseEnter={e => {
-            e.currentTarget.style.backgroundColor = '#ff0000';
-            e.currentTarget.style.transform = 'scale(1.1)';
-          }}
-          onMouseLeave={e => {
-            e.currentTarget.style.backgroundColor = '#ff4444';
-            e.currentTarget.style.transform = 'scale(1)';
-          }}
-          title="Close (Esc)"
-        >
-          ×
-        </button>
-
-        {/* Action buttons container */}
+        {/* Menu Card */}
         <div
           style={{
+            backgroundColor: '#0a0a0a',
+            border: '1px solid #333',
+            borderRadius: '2px',
+            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.5)',
             display: 'flex',
-            gap: '4px',
+            gap: '1px',
+            overflow: 'hidden',
           }}
         >
-          {/* Explain This Button */}
-          <button
-            onClick={onExplain}
-            style={{
-              flex: 1,
-              padding: '10px 12px',
-              border: 'none',
-              borderRadius: '6px',
-              backgroundColor: 'transparent',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              fontSize: '14px',
-              color: '#333',
-              transition: 'background-color 0.2s',
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.backgroundColor = '#f5f5f5';
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.backgroundColor = 'transparent';
-            }}
-          >
-            <span style={{ fontSize: '16px' }}>❓</span>
-            <span>Explain This</span>
-          </button>
-
-          {/* Ask AI Button */}
-          <button
-            onClick={onAskAI}
-            style={{
-              flex: 1,
-              padding: '10px 12px',
-              border: 'none',
-              borderRadius: '6px',
-              backgroundColor: 'transparent',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              fontSize: '14px',
-              color: '#333',
-              transition: 'background-color 0.2s',
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.backgroundColor = '#f5f5f5';
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.backgroundColor = 'transparent';
-            }}
-          >
-            <span style={{ fontSize: '16px' }}>🔍</span>
-            <span>Ask AI</span>
-          </button>
-
-          {/* Define Button */}
-          <button
-            onClick={onDefine}
-            style={{
-              flex: 1,
-              padding: '10px 12px',
-              border: 'none',
-              borderRadius: '6px',
-              backgroundColor: 'transparent',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              fontSize: '14px',
-              color: '#333',
-              transition: 'background-color 0.2s',
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.backgroundColor = '#f5f5f5';
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.backgroundColor = 'transparent';
-            }}
-          >
-            <span style={{ fontSize: '16px' }}>📖</span>
-            <span>Define</span>
-          </button>
-
-          {/* Annotate Button */}
-          <button
-            onClick={onAnnotate}
-            style={{
-              flex: 1,
-              padding: '10px 12px',
-              border: 'none',
-              borderRadius: '6px',
-              backgroundColor: 'transparent',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              fontSize: '14px',
-              color: '#333',
-              transition: 'background-color 0.2s',
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.backgroundColor = '#f5f5f5';
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.backgroundColor = 'transparent';
-            }}
-          >
-            <span style={{ fontSize: '16px' }}>✏️</span>
-            <span>Annotate</span>
-          </button>
+          {actions.map((action, idx) => (
+            <button
+              key={idx}
+              onClick={action.onClick}
+              style={{
+                padding: '10px 20px',
+                border: 'none',
+                borderRight: idx < actions.length - 1 ? '1px solid #333' : 'none',
+                backgroundColor: '#0a0a0a',
+                cursor: 'pointer',
+                fontSize: '13px',
+                fontWeight: '300',
+                color: '#888',
+                transition: 'all 0.15s ease',
+                letterSpacing: '0.3px',
+                whiteSpace: 'nowrap',
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.backgroundColor = '#ffffff';
+                e.currentTarget.style.color = '#000';
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.backgroundColor = '#0a0a0a';
+                e.currentTarget.style.color = '#888';
+              }}
+            >
+              {action.label}
+            </button>
+          ))}
         </div>
       </div>
     </>

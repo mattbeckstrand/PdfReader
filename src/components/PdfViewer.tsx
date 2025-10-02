@@ -313,12 +313,12 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
           ============================================================ */}
       <div
         style={{
-          padding: '10px 20px',
-          borderBottom: '1px solid #ddd',
+          padding: '16px 24px',
+          borderBottom: '1px solid #1a1a1a',
           display: 'flex',
           alignItems: 'center',
-          gap: '15px',
-          backgroundColor: '#f8f9fa',
+          gap: '20px',
+          backgroundColor: '#0a0a0a',
           flexShrink: 0,
         }}
       >
@@ -327,14 +327,28 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
           onClick={() => fileInputRef.current?.click()}
           style={{
             padding: '8px 16px',
-            fontSize: '14px',
+            fontSize: '13px',
+            fontWeight: '400',
             cursor: 'pointer',
-            border: '1px solid #ddd',
-            borderRadius: '4px',
-            backgroundColor: 'white',
+            border: '1px solid #333',
+            borderRadius: '2px',
+            backgroundColor: 'transparent',
+            color: '#fff',
+            transition: 'all 0.15s ease',
+            letterSpacing: '0.3px',
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.backgroundColor = '#ffffff';
+            e.currentTarget.style.color = '#000';
+            e.currentTarget.style.borderColor = '#ffffff';
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.backgroundColor = 'transparent';
+            e.currentTarget.style.color = '#fff';
+            e.currentTarget.style.borderColor = '#333';
           }}
         >
-          Open PDF
+          Open
         </button>
 
         {/* Hidden File Input */}
@@ -352,9 +366,22 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
             {/* Page Number Input - Jump to page */}
             <form
               onSubmit={handlePageInputSubmit}
-              style={{ display: 'flex', alignItems: 'center', gap: '5px' }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+              }}
             >
-              <span style={{ fontSize: '14px', color: '#666' }}>Page</span>
+              <span
+                style={{
+                  fontSize: '13px',
+                  color: '#666',
+                  fontWeight: '300',
+                  letterSpacing: '0.3px',
+                }}
+              >
+                Page
+              </span>
               <input
                 type="number"
                 min="1"
@@ -362,23 +389,40 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
                 value={pageInput}
                 onChange={handlePageInputChange}
                 style={{
-                  width: '60px',
-                  padding: '4px',
+                  width: '50px',
+                  padding: '6px 8px',
                   textAlign: 'center',
-                  border: '1px solid #ddd',
-                  borderRadius: '4px',
-                  fontSize: '14px',
+                  border: '1px solid #333',
+                  borderRadius: '2px',
+                  fontSize: '13px',
+                  fontWeight: '400',
+                  backgroundColor: '#0a0a0a',
+                  color: '#fff',
                 }}
               />
-              <span style={{ fontSize: '14px', color: '#666' }}>of {totalPages}</span>
+              <span
+                style={{
+                  fontSize: '13px',
+                  color: '#666',
+                  fontWeight: '300',
+                  letterSpacing: '0.3px',
+                }}
+              >
+                / {totalPages}
+              </span>
             </form>
 
-            {/* Document Info and Keyboard Shortcuts */}
+            {/* Document Info */}
             <div
-              style={{ marginLeft: 'auto', fontSize: '12px', color: '#666', textAlign: 'right' }}
+              style={{
+                marginLeft: 'auto',
+                fontSize: '13px',
+                color: '#666',
+                fontWeight: '300',
+                letterSpacing: '0.3px',
+              }}
             >
-              <div>{pdfDocument.numPages} pages</div>
-              <div style={{ fontSize: '11px', color: '#999' }}>↑↓ / PgUp/PgDn • Home/End</div>
+              {pdfDocument.numPages} pages
             </div>
           </>
         )}
@@ -393,7 +437,7 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
           flex: 1,
           overflow: 'auto',
           padding: '20px',
-          backgroundColor: '#f0f0f0',
+          backgroundColor: '#0a0a0a',
           display: 'flex',
           justifyContent: 'center',
           alignItems: 'flex-start',
@@ -406,21 +450,30 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
-              gap: '15px',
+              gap: '20px',
               marginTop: '100px',
             }}
           >
             <div
               style={{
-                width: '40px',
-                height: '40px',
-                border: '3px solid #ddd',
-                borderTop: '3px solid #007bff',
+                width: '30px',
+                height: '30px',
+                border: '1px solid #333',
+                borderTop: '1px solid #fff',
                 borderRadius: '50%',
                 animation: 'spin 1s linear infinite',
               }}
             />
-            <p style={{ color: '#666', fontSize: '16px' }}>Loading PDF...</p>
+            <p
+              style={{
+                color: '#666',
+                fontSize: '13px',
+                fontWeight: '300',
+                letterSpacing: '0.5px',
+              }}
+            >
+              Loading document...
+            </p>
           </div>
         )}
 
@@ -428,18 +481,27 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
         {error && !loading && (
           <div
             style={{
-              padding: '20px',
-              backgroundColor: '#fee',
-              border: '1px solid #fcc',
-              borderRadius: '8px',
-              color: '#c00',
+              padding: '24px',
+              backgroundColor: '#0a0a0a',
+              border: '1px solid #333',
+              borderRadius: '2px',
+              color: '#888',
               maxWidth: '400px',
               textAlign: 'center',
               marginTop: '100px',
             }}
           >
-            <h3 style={{ margin: '0 0 10px 0' }}>Error Loading PDF</h3>
-            <p style={{ margin: 0 }}>{error}</p>
+            <p
+              style={{
+                margin: '0 0 8px 0',
+                fontSize: '13px',
+                fontWeight: '300',
+                letterSpacing: '0.5px',
+              }}
+            >
+              Error loading document
+            </p>
+            <p style={{ margin: 0, fontSize: '12px', color: '#666' }}>{error}</p>
           </div>
         )}
 
@@ -447,18 +509,99 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
         {!pdfDocument && !loading && !error && (
           <div
             style={{
-              textAlign: 'center',
-              color: '#666',
-              marginTop: '100px',
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: '#0a0a0a',
+              padding: '40px',
             }}
           >
-            <h2 style={{ marginBottom: '15px', color: '#333' }}>AI PDF Reader</h2>
-            <p style={{ fontSize: '16px', marginBottom: '20px' }}>
-              Click "Open PDF" to get started
-            </p>
-            <p style={{ fontSize: '14px', color: '#999' }}>
-              Once loaded, highlight text and ask AI questions about it
-            </p>
+            <div
+              style={{
+                textAlign: 'center',
+                maxWidth: '600px',
+              }}
+            >
+              {/* Title */}
+              <h1
+                style={{
+                  fontSize: '24px',
+                  fontWeight: '300',
+                  marginBottom: '12px',
+                  color: '#ffffff',
+                  letterSpacing: '0.5px',
+                }}
+              >
+                AI PDF Reader
+              </h1>
+              <div
+                style={{
+                  width: '60px',
+                  height: '1px',
+                  backgroundColor: '#333',
+                  margin: '0 auto 40px',
+                }}
+              />
+
+              {/* Description */}
+              <p
+                style={{
+                  fontSize: '15px',
+                  marginBottom: '48px',
+                  color: '#888',
+                  lineHeight: '1.6',
+                  fontWeight: '300',
+                }}
+              >
+                Select text to interact with document intelligence
+              </p>
+
+              {/* CTA Button */}
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                style={{
+                  padding: '14px 32px',
+                  fontSize: '14px',
+                  fontWeight: '400',
+                  cursor: 'pointer',
+                  border: '1px solid #333',
+                  borderRadius: '2px',
+                  backgroundColor: 'transparent',
+                  color: '#fff',
+                  transition: 'all 0.2s ease',
+                  letterSpacing: '0.5px',
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.backgroundColor = '#ffffff';
+                  e.currentTarget.style.color = '#000';
+                  e.currentTarget.style.borderColor = '#ffffff';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.backgroundColor = 'transparent';
+                  e.currentTarget.style.color = '#fff';
+                  e.currentTarget.style.borderColor = '#333';
+                }}
+              >
+                Open Document
+              </button>
+
+              {/* Keyboard Shortcut Hint */}
+              <p
+                style={{
+                  marginTop: '60px',
+                  fontSize: '12px',
+                  color: '#444',
+                  letterSpacing: '0.5px',
+                }}
+              >
+                ⌘O to open
+              </p>
+            </div>
           </div>
         )}
 
@@ -496,14 +639,14 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
           100% { transform: rotate(360deg); }
         }
 
-        /* Beautiful text selection color */
+        /* Text selection color - visible on white PDF background */
         .textLayer ::selection {
-          background: rgba(0, 123, 255, 0.35);
+          background: rgba(0, 0, 0, 0.15);
           color: transparent;
         }
 
         .textLayer ::-moz-selection {
-          background: rgba(0, 123, 255, 0.35);
+          background: rgba(0, 0, 0, 0.15);
           color: transparent;
         }
 
