@@ -347,32 +347,37 @@ const App: React.FC = () => {
             top: '50%',
             left: '50%',
             transform: 'translate(-50%, -50%)',
-            backgroundColor: 'rgba(0, 0, 0, 0.9)',
-            color: 'white',
+            backgroundColor: '#0a0a0a',
+            border: '1px solid #333',
+            color: '#888',
             padding: '30px 40px',
-            borderRadius: '12px',
-            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.3)',
+            borderRadius: '2px',
+            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.5)',
             zIndex: 1000,
             textAlign: 'center',
-            minWidth: '300px',
+            minWidth: '280px',
           }}
         >
           <div
             style={{
-              width: '40px',
-              height: '40px',
-              border: '4px solid rgba(255, 255, 255, 0.3)',
-              borderTop: '4px solid white',
+              width: '30px',
+              height: '30px',
+              border: '1px solid #333',
+              borderTop: '1px solid #fff',
               borderRadius: '50%',
               margin: '0 auto 20px',
               animation: 'spin 1s linear infinite',
             }}
           />
-          <h3 style={{ margin: '0 0 10px', fontSize: '18px', fontWeight: 600 }}>
-            Preparing PDF for AI...
-          </h3>
-          <p style={{ margin: 0, fontSize: '14px', color: 'rgba(255, 255, 255, 0.8)' }}>
-            Enabling full document understanding with vision
+          <p
+            style={{
+              margin: 0,
+              fontSize: '13px',
+              fontWeight: '300',
+              letterSpacing: '0.5px',
+            }}
+          >
+            Preparing document for AI...
           </p>
           <style>{`
             @keyframes spin {
@@ -390,21 +395,22 @@ const App: React.FC = () => {
             position: 'fixed',
             top: '20px',
             right: '20px',
-            backgroundColor: '#10b981',
-            color: 'white',
-            padding: '12px 20px',
-            borderRadius: '8px',
-            boxShadow: '0 2px 10px rgba(16, 185, 129, 0.3)',
+            backgroundColor: '#0a0a0a',
+            border: '1px solid #333',
+            color: '#888',
+            padding: '10px 16px',
+            borderRadius: '2px',
+            boxShadow: '0 2px 10px rgba(0, 0, 0, 0.3)',
             zIndex: 999,
             display: 'flex',
             alignItems: 'center',
             gap: '8px',
-            fontSize: '14px',
-            fontWeight: 500,
+            fontSize: '12px',
+            fontWeight: 300,
+            letterSpacing: '0.3px',
           }}
         >
-          <span style={{ fontSize: '18px' }}>✓</span>
-          <span>AI has full document context</span>
+          <span>AI ready</span>
         </div>
       )}
 

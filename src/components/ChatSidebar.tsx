@@ -127,8 +127,9 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({
           right: 0,
           bottom: 0,
           width: '400px',
-          backgroundColor: 'white',
-          boxShadow: '-2px 0 8px rgba(0, 0, 0, 0.1)',
+          backgroundColor: '#0a0a0a',
+          borderLeft: '1px solid #1a1a1a',
+          boxShadow: '-4px 0 20px rgba(0, 0, 0, 0.5)',
           zIndex: 999,
           display: 'flex',
           flexDirection: 'column',
@@ -139,39 +140,51 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({
         {/* Header */}
         <div
           style={{
-            padding: '20px',
-            borderBottom: '1px solid #e5e5e5',
+            padding: '20px 24px',
+            borderBottom: '1px solid #1a1a1a',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            backgroundColor: '#f8f9fa',
+            backgroundColor: '#0a0a0a',
           }}
         >
-          <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 600, color: '#333' }}>
+          <h2
+            style={{
+              margin: 0,
+              fontSize: '14px',
+              fontWeight: 300,
+              color: '#888',
+              letterSpacing: '0.5px',
+            }}
+          >
             AI Assistant
           </h2>
           <button
             onClick={onClose}
             style={{
               background: 'none',
-              border: 'none',
-              fontSize: '24px',
+              border: '1px solid #333',
+              borderRadius: '2px',
+              fontSize: '18px',
               cursor: 'pointer',
               color: '#666',
               padding: '0',
-              width: '32px',
-              height: '32px',
+              width: '28px',
+              height: '28px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              borderRadius: '4px',
-              transition: 'background-color 0.2s',
+              transition: 'all 0.15s',
             }}
             onMouseEnter={e => {
-              e.currentTarget.style.backgroundColor = '#e5e5e5';
+              e.currentTarget.style.backgroundColor = '#ffffff';
+              e.currentTarget.style.color = '#000';
+              e.currentTarget.style.borderColor = '#ffffff';
             }}
             onMouseLeave={e => {
               e.currentTarget.style.backgroundColor = 'transparent';
+              e.currentTarget.style.color = '#666';
+              e.currentTarget.style.borderColor = '#333';
             }}
           >
             ×
@@ -183,7 +196,7 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({
           style={{
             flex: 1,
             overflowY: 'auto',
-            padding: '20px',
+            padding: '24px',
             display: 'flex',
             flexDirection: 'column',
             gap: '16px',
@@ -193,13 +206,19 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({
             <div
               style={{
                 textAlign: 'center',
-                color: '#999',
-                marginTop: '40px',
+                color: '#666',
+                marginTop: '60px',
               }}
             >
-              <p style={{ fontSize: '16px', marginBottom: '8px' }}>👋 Hi there!</p>
-              <p style={{ fontSize: '14px' }}>
-                Highlight text in the PDF and click "Explain This" to start a conversation.
+              <p
+                style={{
+                  fontSize: '13px',
+                  fontWeight: '300',
+                  letterSpacing: '0.3px',
+                  marginBottom: '8px',
+                }}
+              >
+                Highlight text to start
               </p>
             </div>
           )}
@@ -217,11 +236,13 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({
                 style={{
                   maxWidth: '85%',
                   padding: '12px 16px',
-                  borderRadius: '12px',
-                  backgroundColor: message.role === 'user' ? '#007bff' : '#f1f1f1',
-                  color: message.role === 'user' ? 'white' : '#333',
-                  fontSize: '14px',
-                  lineHeight: '1.5',
+                  borderRadius: '2px',
+                  backgroundColor: message.role === 'user' ? '#1a1a1a' : '#0f0f0f',
+                  border: message.role === 'user' ? '1px solid #333' : '1px solid #1a1a1a',
+                  color: message.role === 'user' ? '#fff' : '#888',
+                  fontSize: '13px',
+                  lineHeight: '1.6',
+                  fontWeight: '300',
                   wordWrap: 'break-word',
                 }}
               >
@@ -334,9 +355,11 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({
               </div>
               <span
                 style={{
-                  fontSize: '11px',
-                  color: '#999',
+                  fontSize: '10px',
+                  color: '#444',
                   marginTop: '4px',
+                  fontWeight: '300',
+                  letterSpacing: '0.3px',
                   paddingLeft: message.role === 'user' ? '0' : '8px',
                   paddingRight: message.role === 'user' ? '8px' : '0',
                 }}
@@ -355,22 +378,24 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: '8px',
+                gap: '10px',
                 color: '#666',
-                fontSize: '14px',
+                fontSize: '13px',
+                fontWeight: '300',
+                letterSpacing: '0.3px',
               }}
             >
               <div
                 style={{
-                  width: '20px',
-                  height: '20px',
-                  border: '2px solid #e5e5e5',
-                  borderTop: '2px solid #007bff',
+                  width: '16px',
+                  height: '16px',
+                  border: '1px solid #333',
+                  borderTop: '1px solid #fff',
                   borderRadius: '50%',
                   animation: 'spin 1s linear infinite',
                 }}
               />
-              <span>AI is thinking...</span>
+              <span>Processing...</span>
             </div>
           )}
 
@@ -382,9 +407,9 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({
         <form
           onSubmit={handleSubmit}
           style={{
-            padding: '20px',
-            borderTop: '1px solid #e5e5e5',
-            backgroundColor: 'white',
+            padding: '20px 24px',
+            borderTop: '1px solid #1a1a1a',
+            backgroundColor: '#0a0a0a',
           }}
         >
           <div style={{ display: 'flex', gap: '8px' }}>
@@ -393,46 +418,53 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({
               type="text"
               value={inputValue}
               onChange={e => setInputValue(e.target.value)}
-              placeholder="Ask a follow-up question..."
+              placeholder="Ask..."
               disabled={isLoading}
               style={{
                 flex: 1,
-                padding: '12px 16px',
-                border: '1px solid #e5e5e5',
-                borderRadius: '8px',
-                fontSize: '14px',
+                padding: '10px 14px',
+                border: '1px solid #333',
+                borderRadius: '2px',
+                fontSize: '13px',
+                fontWeight: '300',
+                letterSpacing: '0.3px',
                 outline: 'none',
-                transition: 'border-color 0.2s',
+                backgroundColor: '#0a0a0a',
+                color: '#fff',
+                transition: 'border-color 0.15s',
               }}
               onFocus={e => {
-                e.currentTarget.style.borderColor = '#007bff';
+                e.currentTarget.style.borderColor = '#666';
               }}
               onBlur={e => {
-                e.currentTarget.style.borderColor = '#e5e5e5';
+                e.currentTarget.style.borderColor = '#333';
               }}
             />
             <button
               type="submit"
               disabled={isLoading || !inputValue.trim()}
               style={{
-                padding: '12px 20px',
-                backgroundColor: isLoading || !inputValue.trim() ? '#e5e5e5' : '#007bff',
-                color: isLoading || !inputValue.trim() ? '#999' : 'white',
-                border: 'none',
-                borderRadius: '8px',
+                padding: '10px 20px',
+                backgroundColor: isLoading || !inputValue.trim() ? '#0a0a0a' : '#fff',
+                color: isLoading || !inputValue.trim() ? '#444' : '#000',
+                border: '1px solid #333',
+                borderRadius: '2px',
                 cursor: isLoading || !inputValue.trim() ? 'not-allowed' : 'pointer',
-                fontSize: '14px',
-                fontWeight: 500,
-                transition: 'background-color 0.2s',
+                fontSize: '13px',
+                fontWeight: '300',
+                letterSpacing: '0.3px',
+                transition: 'all 0.15s',
               }}
               onMouseEnter={e => {
                 if (!isLoading && inputValue.trim()) {
-                  e.currentTarget.style.backgroundColor = '#0056b3';
+                  e.currentTarget.style.backgroundColor = '#ffffff';
+                  e.currentTarget.style.borderColor = '#ffffff';
                 }
               }}
               onMouseLeave={e => {
                 if (!isLoading && inputValue.trim()) {
-                  e.currentTarget.style.backgroundColor = '#007bff';
+                  e.currentTarget.style.backgroundColor = '#fff';
+                  e.currentTarget.style.borderColor = '#333';
                 }
               }}
             >
