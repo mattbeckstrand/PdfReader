@@ -1,3 +1,4 @@
+import { MessageSquare } from 'lucide-react';
 import React, { useCallback, useEffect, useState } from 'react';
 import ChatSidebar, { Message } from './components/ChatSidebar';
 import HighlightActionMenu from './components/HighlightActionMenu';
@@ -99,6 +100,22 @@ const App: React.FC = () => {
     document.addEventListener('mouseup', handleMouseUp);
     return () => document.removeEventListener('mouseup', handleMouseUp);
   }, [captureSelection]);
+
+  /**
+   * Handle keyboard shortcuts
+   */
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Command+Shift+K (Mac) or Ctrl+Shift+K (Windows/Linux)
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'K') {
+        e.preventDefault();
+        setIsChatOpen(prev => !prev);
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // ===================================================================
   // AI Response Handler
@@ -322,6 +339,13 @@ const App: React.FC = () => {
     clearSelection();
   }, [clearSelection]);
 
+  /**
+   * Toggle chat sidebar
+   */
+  const handleToggleChat = useCallback(() => {
+    setIsChatOpen(prev => !prev);
+  }, []);
+
   // ===================================================================
   // Render
   // ===================================================================
@@ -388,30 +412,43 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* Context Ready Indicator */}
+      {/* AI Chat Button */}
       {contextInitialized && !isUploading && pdfDocument && (
-        <div
+        <button
+          onClick={handleToggleChat}
           style={{
             position: 'fixed',
-            top: '20px',
-            right: '20px',
-            backgroundColor: '#0a0a0a',
+            top: '18px',
+            right: '24px',
+            backgroundColor: isChatOpen ? '#1a1a1a' : '#0a0a0a',
             border: '1px solid #333',
-            color: '#888',
-            padding: '10px 16px',
+            color: isChatOpen ? '#fff' : '#888',
+            padding: '0',
             borderRadius: '2px',
             boxShadow: '0 2px 10px rgba(0, 0, 0, 0.3)',
             zIndex: 999,
             display: 'flex',
             alignItems: 'center',
-            gap: '8px',
-            fontSize: '12px',
-            fontWeight: 300,
-            letterSpacing: '0.3px',
+            justifyContent: 'center',
+            width: '36px',
+            height: '36px',
+            cursor: 'pointer',
+            transition: 'all 0.15s',
           }}
+          onMouseEnter={e => {
+            e.currentTarget.style.backgroundColor = '#ffffff';
+            e.currentTarget.style.color = '#000';
+            e.currentTarget.style.borderColor = '#ffffff';
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.backgroundColor = isChatOpen ? '#1a1a1a' : '#0a0a0a';
+            e.currentTarget.style.color = isChatOpen ? '#fff' : '#888';
+            e.currentTarget.style.borderColor = '#333';
+          }}
+          title="⌘⇧K"
         >
-          <span>AI ready</span>
-        </div>
+          <MessageSquare size={18} />
+        </button>
       )}
 
       {/* Highlight Action Menu */}

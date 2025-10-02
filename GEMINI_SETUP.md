@@ -19,11 +19,11 @@
 3. (Optional) Choose your model:
 
    ```
-   # Fast & efficient (default)
-   VITE_GEMINI_MODEL=gemini-1.5-flash-latest
+   # Fast & efficient (default) - Gemini 2.0 Flash
+   VITE_GEMINI_MODEL=gemini-2.0-flash-exp
 
-   # More powerful for complex questions
-   VITE_GEMINI_MODEL=gemini-1.5-pro-latest
+   # More powerful for complex questions - Gemini 2.0 Pro
+   VITE_GEMINI_MODEL=gemini-2.0-pro-exp
    ```
 
 ## 🚀 Running the App
@@ -47,12 +47,19 @@ Your AI-native PDF reader now uses Google Gemini:
 
 ## 📊 Model Comparison
 
-| Model                | Speed         | Capability | Best For                         |
-| -------------------- | ------------- | ---------- | -------------------------------- |
-| **Gemini 1.5 Flash** | ⚡️ Very Fast | Good       | Quick questions, summaries       |
-| **Gemini 1.5 Pro**   | 🐢 Slower     | Excellent  | Complex analysis, deep questions |
+| Model                | Speed         | Capability | Best For                                    |
+| -------------------- | ------------- | ---------- | ------------------------------------------- |
+| **Gemini 2.0 Flash** | ⚡️ Very Fast | Excellent  | Quick questions, summaries, multimodal      |
+| **Gemini 2.0 Pro**   | 🐢 Slower     | Superior   | Complex analysis, deep questions, reasoning |
 
-**Recommendation:** Start with Flash (default). Switch to Pro if you need deeper analysis.
+**Recommendation:** Start with Flash (default). Gemini 2.0 Flash is significantly improved over 1.5 and handles most tasks excellently. Switch to Pro only for highly complex reasoning tasks.
+
+### 🆕 What's New in Gemini 2.0
+
+- **Multimodal understanding**: Better integration with images and PDFs
+- **Improved reasoning**: More accurate answers and better context understanding
+- **Faster responses**: Gemini 2.0 Flash is both faster and more capable than 1.5 Flash
+- **Enhanced document analysis**: Better at understanding complex document structures
 
 ## 🔒 Security
 

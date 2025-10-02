@@ -266,23 +266,6 @@ const PdfPage: React.FC<PdfPageProps> = ({
         minHeight: pageHeight ? `${pageHeight}px` : '800px',
       }}
     >
-      {/* Page Number Label */}
-      <div
-        style={{
-          position: 'absolute',
-          top: '10px',
-          right: '10px',
-          backgroundColor: 'rgba(0, 0, 0, 0.6)',
-          color: 'white',
-          padding: '4px 8px',
-          borderRadius: '4px',
-          fontSize: '12px',
-          zIndex: 10,
-        }}
-      >
-        Page {pageNumber}
-      </div>
-
       {/* Loading Skeleton - shown before rendering */}
       {!isRendered && (
         <div

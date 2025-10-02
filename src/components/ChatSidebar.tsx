@@ -52,7 +52,7 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({
 
   const [inputValue, setInputValue] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   // ===================================================================
   // Effects
@@ -82,6 +82,18 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
 
+  // Auto-resize textarea based on content
+  useEffect(() => {
+    const textarea = inputRef.current;
+    if (textarea) {
+      // Reset height to get accurate scrollHeight
+      textarea.style.height = 'auto';
+      // Set height to scrollHeight, with min and max constraints
+      const newHeight = Math.min(Math.max(textarea.scrollHeight, 40), 200);
+      textarea.style.height = `${newHeight}px`;
+    }
+  }, [inputValue]);
+
   // ===================================================================
   // Event Handlers
   // ===================================================================
@@ -93,6 +105,15 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({
       onSendMessage(trimmedValue);
       setInputValue('');
     }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Submit on Enter (without Shift)
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmit(e);
+    }
+    // Allow Shift+Enter for new lines (default textarea behavior)
   };
 
   // ===================================================================
@@ -412,14 +433,15 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({
             backgroundColor: '#0a0a0a',
           }}
         >
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <input
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end' }}>
+            <textarea
               ref={inputRef}
-              type="text"
               value={inputValue}
               onChange={e => setInputValue(e.target.value)}
-              placeholder="Ask..."
+              onKeyDown={handleKeyDown}
+              placeholder="Ask... (Shift+Enter for new line)"
               disabled={isLoading}
+              rows={1}
               style={{
                 flex: 1,
                 padding: '10px 14px',
@@ -432,6 +454,12 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({
                 backgroundColor: '#0a0a0a',
                 color: '#fff',
                 transition: 'border-color 0.15s',
+                resize: 'none',
+                overflow: 'hidden',
+                fontFamily: 'inherit',
+                lineHeight: '1.5',
+                minHeight: '40px',
+                maxHeight: '200px',
               }}
               onFocus={e => {
                 e.currentTarget.style.borderColor = '#666';
@@ -454,6 +482,8 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({
                 fontWeight: '300',
                 letterSpacing: '0.3px',
                 transition: 'all 0.15s',
+                height: '40px',
+                flexShrink: 0,
               }}
               onMouseEnter={e => {
                 if (!isLoading && inputValue.trim()) {
