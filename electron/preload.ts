@@ -32,11 +32,24 @@ interface ElectronAPI {
     set: <T>(key: string, value: T) => Promise<void>;
   };
 
+  // File system operations
+  file: {
+    read: (filePath: string) => Promise<FileReadResult>;
+  };
+
   // System
   system: {
     platform: NodeJS.Platform;
     openExternal: (url: string) => Promise<void>;
   };
+}
+
+interface FileReadResult {
+  success: boolean;
+  data?: Uint8Array;
+  name?: string;
+  path?: string;
+  error?: string;
 }
 
 // Import types (these should be defined in src/types/index.ts)
@@ -106,6 +119,11 @@ const electronAPI: ElectronAPI = {
   settings: {
     get: <T>(key: string) => ipcRenderer.invoke('settings:get', key) as Promise<T | null>,
     set: <T>(key: string, value: T) => ipcRenderer.invoke('settings:set', { key, value }),
+  },
+
+  file: {
+    read: (filePath: string) =>
+      ipcRenderer.invoke('file:read', filePath) as Promise<FileReadResult>,
   },
 
   system: {
