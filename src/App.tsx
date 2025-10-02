@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import ChatSidebar, { Message } from './components/ChatSidebar';
 import HighlightActionMenu from './components/HighlightActionMenu';
 import PdfViewer from './components/PdfViewer';
-import { useHighlight } from './hooks/useHighlight';
+import { useMathAwareSelection } from './hooks/useMathAwareSelection';
 import { usePdfContext } from './hooks/usePdfContext';
 import { usePdfDocument } from './hooks/usePdfDocument';
 
@@ -29,7 +29,22 @@ const App: React.FC = () => {
     originalFile,
   } = usePdfDocument();
 
-  const { highlightedText, selectionPosition, captureSelection, clearSelection } = useHighlight();
+  const {
+    highlightedText,
+    selectionPosition,
+    mathContent,
+    mathPlainText,
+    isMathMode,
+    mathRegion,
+    ocrConfidence,
+    processingOCR,
+    ocrError,
+    captureSelection,
+    captureSelectionWithMath,
+    captureClickMath,
+    correctMathContent,
+    clearSelection,
+  } = useMathAwareSelection();
 
   const {
     initializeContext,
@@ -88,19 +103,43 @@ const App: React.FC = () => {
   // ===================================================================
 
   /**
-   * Handle text selection events on the document
+   * Handle text selection events on the document with math awareness
    */
   useEffect(() => {
     const handleMouseUp = () => {
       const selection = window.getSelection();
       if (selection && selection.toString().trim().length > 0) {
-        captureSelection();
+        // Use math-aware selection for better equation handling
+        captureSelectionWithMath();
+      }
+    };
+
+    // Handle single clicks for snap-to-equation functionality
+    const handleClick = (event: MouseEvent) => {
+      // Only process clicks on text elements in PDF pages
+      const target = event.target as HTMLElement;
+      const isTextElement = target.closest('.textLayer span, .textLayer div');
+
+      if (isTextElement && event.detail === 1) { // Single click only
+        // Small delay to avoid interfering with drag selection
+        setTimeout(() => {
+          const selection = window.getSelection();
+          if (!selection || selection.toString().trim().length === 0) {
+            // No current selection, try snap-to-equation
+            captureClickMath(event.clientX, event.clientY);
+          }
+        }, 100);
       }
     };
 
     document.addEventListener('mouseup', handleMouseUp);
-    return () => document.removeEventListener('mouseup', handleMouseUp);
-  }, [captureSelection]);
+    document.addEventListener('click', handleClick);
+
+    return () => {
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.removeEventListener('click', handleClick);
+    };
+  }, [captureSelectionWithMath, captureClickMath]);
 
   /**
    * Handle keyboard shortcuts
@@ -286,6 +325,129 @@ const App: React.FC = () => {
     clearSelection();
   }, [highlightedText, clearSelection]);
 
+  // ===================================================================
+  // Math-Specific Action Handlers
+  // ===================================================================
+
+  /**
+   * Handle "Solve" action for mathematical content
+   */
+  const handleSolve = useCallback(() => {
+    if (!contextInitialized) {
+      alert('Please wait for the PDF to be processed by AI...');
+      return;
+    }
+
+    const contentToSolve = mathContent || highlightedText || '';
+    if (!contentToSolve) return;
+
+    // Store context
+    setCurrentContext(contentToSolve);
+
+    // Add user message
+    const preview = contentToSolve.length > 60 ? `${contentToSolve.substring(0, 60)}...` : contentToSolve;
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      role: 'user',
+      content: `🧮 Solve: "${preview}"`,
+      timestamp: new Date(),
+    };
+    setMessages(prev => [...prev, userMessage]);
+
+    // Open chat sidebar
+    setIsChatOpen(true);
+
+    // Create AI prompt for solving
+    let prompt = '';
+    if (mathContent) {
+      prompt = `Solve this mathematical expression step by step: ${mathContent}
+
+Please:
+1. Show each step clearly
+2. Explain the reasoning for each step
+3. Provide the final answer
+4. If it's not solvable, explain why`;
+    } else {
+      prompt = `Solve this mathematical problem step by step: "${highlightedText}"`;
+    }
+
+    // Ask AI
+    askWithContext(prompt, contentToSolve, currentPage)
+      .then(answer => setLatestAnswer(answer))
+      .catch(err => console.error('Failed to get AI response:', err));
+
+    // Clear selection
+    clearSelection();
+  }, [mathContent, highlightedText, currentPage, askWithContext, clearSelection, contextInitialized]);
+
+  /**
+   * Handle "Simplify" action for mathematical content
+   */
+  const handleSimplify = useCallback(() => {
+    if (!contextInitialized) {
+      alert('Please wait for the PDF to be processed by AI...');
+      return;
+    }
+
+    const contentToSimplify = mathContent || highlightedText || '';
+    if (!contentToSimplify) return;
+
+    // Store context
+    setCurrentContext(contentToSimplify);
+
+    // Add user message
+    const preview = contentToSimplify.length > 60 ? `${contentToSimplify.substring(0, 60)}...` : contentToSimplify;
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      role: 'user',
+      content: `📝 Simplify: "${preview}"`,
+      timestamp: new Date(),
+    };
+    setMessages(prev => [...prev, userMessage]);
+
+    // Open chat sidebar
+    setIsChatOpen(true);
+
+    // Create AI prompt for simplifying
+    let prompt = '';
+    if (mathContent) {
+      prompt = `Simplify this mathematical expression: ${mathContent}
+
+Please:
+1. Show the original expression
+2. Apply appropriate simplification rules
+3. Show intermediate steps if helpful
+4. Provide the simplified form
+5. Explain what made the simplification possible`;
+    } else {
+      prompt = `Simplify this mathematical expression: "${highlightedText}"`;
+    }
+
+    // Ask AI
+    askWithContext(prompt, contentToSimplify, currentPage)
+      .then(answer => setLatestAnswer(answer))
+      .catch(err => console.error('Failed to get AI response:', err));
+
+    // Clear selection
+    clearSelection();
+  }, [mathContent, highlightedText, currentPage, askWithContext, clearSelection, contextInitialized]);
+
+  /**
+   * Handle "Edit Equation" action - allow user to correct OCR results
+   */
+  const handleEditEquation = useCallback(() => {
+    const currentMath = mathContent || highlightedText || '';
+
+    const correctedLatex = prompt(
+      `Edit the recognized equation:\n\n${currentMath}\n\nEnter the corrected LaTeX:`,
+      currentMath
+    );
+
+    if (correctedLatex && correctedLatex !== currentMath) {
+      correctMathContent(correctedLatex);
+    }
+  }, [mathContent, highlightedText, correctMathContent]);
+
   /**
    * Handle sending a message in the chat
    */
@@ -336,6 +498,24 @@ const App: React.FC = () => {
   }, [clearSelection]);
 
   /**
+   * Handle canvas ready for OCR support
+   * This is used by the math selection hook to access PDF canvases for image extraction
+   */
+  const handleCanvasReady = useCallback((
+    pageNum: number,
+    canvas: HTMLCanvasElement | null,
+    scaleFactor?: number
+  ) => {
+    // Note: Canvas access is now handled internally by useMathAwareSelection
+    // via findPdfCanvas() method. This callback can be used for future optimizations
+    // like pre-processing math regions or caching canvas references by page.
+
+    if (canvas) {
+      console.log(`🎨 Canvas ready for page ${pageNum} (scale: ${scaleFactor})`);
+    }
+  }, []);
+
+  /**
    * Toggle chat sidebar
    */
   const handleToggleChat = useCallback(() => {
@@ -357,6 +537,7 @@ const App: React.FC = () => {
         error={error}
         onLoadPdf={loadPdf}
         onSetCurrentPage={setCurrentPage}
+        onCanvasReady={handleCanvasReady}
       />
 
       {/* PDF Upload Progress Indicator */}
@@ -452,10 +633,18 @@ const App: React.FC = () => {
         <HighlightActionMenu
           selectedText={highlightedText}
           position={selectionPosition}
+          isMathMode={isMathMode}
+          mathContent={mathContent}
+          ocrConfidence={ocrConfidence}
+          processingOCR={processingOCR}
+          ocrError={ocrError}
           onExplain={handleExplain}
           onAskAI={handleAskAI}
           onDefine={handleDefine}
           onAnnotate={handleAnnotate}
+          onSolve={handleSolve}
+          onSimplify={handleSimplify}
+          onEditEquation={handleEditEquation}
           onClose={handleCloseMenu}
         />
       )}

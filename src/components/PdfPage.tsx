@@ -12,6 +12,38 @@ interface PdfPageProps {
   containerWidth: number;
   onPageRef?: (pageNum: number, element: HTMLDivElement | null) => void;
   onVisibilityChange?: (pageNum: number, isVisible: boolean) => void;
+  onCanvasReady?: (pageNum: number, canvas: HTMLCanvasElement | null, scaleFactor?: number) => void;
+}
+
+// ===================================================================
+// Image Extraction Utility
+// ===================================================================
+
+/**
+ * Extract image data from canvas region for OCR processing
+ */
+export function extractImageFromCanvasRegion(
+  canvas: HTMLCanvasElement,
+  bbox: { x: number; y: number; width: number; height: number },
+  scaleFactor: number = 1
+): ImageData | null {
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+
+  try {
+    // Convert screen coordinates to canvas coordinates
+    const x = Math.max(0, Math.floor(bbox.x * scaleFactor));
+    const y = Math.max(0, Math.floor(bbox.y * scaleFactor));
+    const width = Math.min(canvas.width - x, Math.floor(bbox.width * scaleFactor));
+    const height = Math.min(canvas.height - y, Math.floor(bbox.height * scaleFactor));
+
+    if (width <= 0 || height <= 0) return null;
+
+    return ctx.getImageData(x, y, width, height);
+  } catch (error) {
+    console.error('Failed to extract image from canvas:', error);
+    return null;
+  }
 }
 
 // ===================================================================
@@ -28,6 +60,7 @@ const PdfPage: React.FC<PdfPageProps> = ({
   containerWidth,
   onPageRef,
   onVisibilityChange,
+  onCanvasReady,
 }) => {
   // ===================================================================
   // Refs
@@ -45,6 +78,7 @@ const PdfPage: React.FC<PdfPageProps> = ({
   const [isVisible, setIsVisible] = useState(false);
   const [isRendered, setIsRendered] = useState(false);
   const [pageHeight, setPageHeight] = useState<number | null>(null);
+  const [scaleFactor, setScaleFactor] = useState<number | null>(null);
 
   // ===================================================================
   // Calculate Page Height
@@ -98,6 +132,9 @@ const PdfPage: React.FC<PdfPageProps> = ({
       const viewport = page.getViewport({ scale: 1.0 });
       const calculatedScale = containerWidth / viewport.width;
       const scaledViewport = page.getViewport({ scale: calculatedScale });
+
+      // Store scale factor for coordinate conversion (OCR needs this)
+      setScaleFactor(calculatedScale);
 
       // High-DPI (Retina) display support
       const dpr = window.devicePixelRatio || 1;
@@ -164,8 +201,8 @@ const PdfPage: React.FC<PdfPageProps> = ({
         // Ensure ALL text elements are selectable regardless of styling
         element.style.pointerEvents = 'auto';
         element.style.userSelect = 'text';
-        element.style.WebkitUserSelect = 'text';
-        element.style.MozUserSelect = 'text';
+        (element.style as any).webkitUserSelect = 'text';
+        (element.style as any).mozUserSelect = 'text';
 
         // Ensure proper cursor for all text
         element.style.cursor = 'text';
@@ -183,10 +220,15 @@ const PdfPage: React.FC<PdfPageProps> = ({
 
       setIsRendered(true);
       console.log(`✅ Page ${pageNumber} rendered successfully`);
+
+      // Notify parent that canvas is ready for OCR
+      if (onCanvasReady && canvas) {
+        onCanvasReady(pageNumber, canvas, calculatedScale);
+      }
     } catch (err) {
       console.error(`❌ Failed to render page ${pageNumber}:`, err);
     }
-  }, [page, pageNumber, containerWidth]);
+  }, [page, pageNumber, containerWidth, onCanvasReady]);
 
   // ===================================================================
   // Effects
@@ -247,6 +289,17 @@ const PdfPage: React.FC<PdfPageProps> = ({
       }
     };
   }, [pageNumber, onPageRef]);
+
+  /**
+   * Cleanup canvas reference on unmount
+   */
+  useEffect(() => {
+    return () => {
+      if (onCanvasReady) {
+        onCanvasReady(pageNumber, null);
+      }
+    };
+  }, [pageNumber, onCanvasReady]);
 
   // ===================================================================
   // Render
