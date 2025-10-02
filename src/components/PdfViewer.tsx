@@ -411,19 +411,6 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
                 / {totalPages}
               </span>
             </form>
-
-            {/* Document Info */}
-            <div
-              style={{
-                marginLeft: 'auto',
-                fontSize: '13px',
-                color: '#666',
-                fontWeight: '300',
-                letterSpacing: '0.3px',
-              }}
-            >
-              {pdfDocument.numPages} pages
-            </div>
           </>
         )}
       </div>
