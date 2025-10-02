@@ -9,26 +9,22 @@ const App: React.FC = () => {
     loading,
     error,
     loadPdf,
-    nextPage,
-    prevPage,
-    goToPage,
+    setCurrentPage,
     pdfDocument,
-    currentPageObject,
+    allPageObjects,
   } = usePdfDocument();
 
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
       <PdfViewer
         pdfDocument={pdfDocument}
-        currentPageObject={currentPageObject}
+        allPageObjects={allPageObjects}
         currentPage={currentPage}
         totalPages={totalPages}
         loading={loading}
         error={error}
         onLoadPdf={loadPdf}
-        onNextPage={nextPage}
-        onPrevPage={prevPage}
-        onGoToPage={goToPage}
+        onSetCurrentPage={setCurrentPage}
       />
     </div>
   );

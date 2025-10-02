@@ -10,7 +10,7 @@
     "electron:build": "electron-builder"
   },
   "dependencies": {
-    "openai": "^4.20.0",
+    "@google/generative-ai": "^0.24.1",
     "pdfjs-dist": "^3.11.174",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"

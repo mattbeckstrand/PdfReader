@@ -3,16 +3,16 @@
  */
 
 // ============================================================================
-// AI Configuration
+// AI Configuration - Google Gemini
 // ============================================================================
 
-export const DEFAULT_AI_MODEL = import.meta.env.VITE_OPENAI_MODEL || 'gpt-4o';
-export const DEFAULT_EMBEDDING_MODEL =
-  import.meta.env.VITE_EMBEDDING_MODEL || 'text-embedding-3-small';
+export const DEFAULT_AI_MODEL = import.meta.env['VITE_GEMINI_MODEL'] || 'gemini-1.5-flash-latest';
+export const GEMINI_PRO_MODEL = import.meta.env['VITE_GEMINI_PRO_MODEL'] || 'gemini-1.5-pro-latest';
+export const GEMINI_API_KEY = import.meta.env['VITE_GEMINI_API_KEY'];
 
 export const AI_CONFIG = {
-  temperature: 0.7,
-  maxTokens: 1000,
+  temperature: Number(import.meta.env['VITE_AI_TEMPERATURE']) || 0.7,
+  maxTokens: Number(import.meta.env['VITE_AI_MAX_TOKENS']) || 1000,
   topP: 1.0,
 } as const;
 
@@ -63,10 +63,11 @@ export const UI_CONFIG = {
 export const ERROR_MESSAGES = {
   PDF_LOAD_FAILED: 'Failed to load PDF. Please try again or choose a different file.',
   AI_REQUEST_FAILED: 'Unable to get AI response. Please check your connection and try again.',
-  INVALID_API_KEY: 'Invalid API key. Please check your OpenAI API key in settings.',
+  INVALID_API_KEY: 'Invalid API key. Please check your Google Gemini API key in the .env file.',
   RATE_LIMIT_EXCEEDED: 'Too many requests. Please wait a moment and try again.',
   NO_TEXT_SELECTED: 'Please highlight some text before asking a question.',
   PDF_TEXT_EXTRACTION_FAILED: 'Failed to extract text from PDF page.',
+  NO_API_KEY: 'No API key found. Please add VITE_GEMINI_API_KEY to your .env file.',
 } as const;
 
 // ============================================================================

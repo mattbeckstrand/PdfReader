@@ -3,23 +3,21 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 // ✅ CORRECT: Import from legacy build for Electron compatibility
 import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist/legacy/build/pdf';
 
+import PdfPage from './PdfPage';
+
 // ===================================================================
 // Component Props Interface
 // ===================================================================
 
 interface PdfViewerProps {
   pdfDocument: PDFDocumentProxy | null;
-  currentPageObject: PDFPageProxy | null;
+  allPageObjects: PDFPageProxy[];
   currentPage: number;
   totalPages: number;
   loading: boolean;
   error: string | null;
   onLoadPdf: (file: File) => Promise<void>;
-  onNextPage: () => void;
-  onPrevPage: () => void;
-  onGoToPage: (pageNum: number) => void;
-  onPageChange?: (pageNum: number) => void;
-  onTextExtracted?: (text: string) => void;
+  onSetCurrentPage: (pageNum: number) => void;
 }
 
 // ===================================================================
@@ -27,198 +25,70 @@ interface PdfViewerProps {
 // ===================================================================
 
 /**
- * PDF Viewer component for rendering PDFs in Electron + React
+ * PDF Viewer component for rendering PDFs with continuous scroll
  *
  * Features:
  * - Canvas-based PDF rendering using PDF.js legacy build
  * - Transparent text layer overlay for text selection
+ * - Continuous scrolling through all pages
  * - Responsive scaling to fit container
- * - Navigation controls (prev/next/goto page)
  * - File picker for loading PDFs
  *
  * Built for Electron environment with proper worker communication
  */
 const PdfViewer: React.FC<PdfViewerProps> = ({
   pdfDocument,
-  currentPageObject,
+  allPageObjects,
   currentPage,
   totalPages,
   loading,
   error,
   onLoadPdf,
-  onNextPage,
-  onPrevPage,
-  onGoToPage,
-  onPageChange,
-  onTextExtracted,
+  onSetCurrentPage,
 }) => {
+  const MAX_PAGE_WIDTH = 900; // Keep in sync with wrapper style below
   // ===================================================================
   // Refs
   // ===================================================================
 
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const textLayerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const pageRefsMap = useRef<Map<number, HTMLDivElement>>(new Map());
+  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // ===================================================================
   // State
   // ===================================================================
 
   const [pageInput, setPageInput] = useState('');
+  const [containerWidth, setContainerWidth] = useState(0);
+  const [visiblePages, setVisiblePages] = useState<Set<number>>(new Set());
 
   // ===================================================================
-  // Page Rendering
+  // Measure Container Width
   // ===================================================================
 
   /**
-   * Render the current PDF page to canvas with text layer overlay
-   * Handles responsive scaling and text extraction
+   * Measure and update container width for responsive page rendering
    */
-  const renderPage = useCallback(async () => {
-    console.log('🎨 Starting page render...');
+  useEffect(() => {
+    if (!containerRef.current) return;
 
-    // Validate prerequisites
-    if (!currentPageObject) {
-      console.warn('⚠️ No current page object for rendering');
-      return;
-    }
-    if (!canvasRef.current || !textLayerRef.current || !containerRef.current) {
-      console.warn('⚠️ DOM refs not available');
-      return;
-    }
-
-    const canvas = canvasRef.current;
-    const textLayer = textLayerRef.current;
-    const container = containerRef.current;
-    console.log('✅ All DOM elements available for rendering');
-
-    const context = canvas.getContext('2d');
-    if (!context) {
-      console.error('❌ Cannot get 2D context from canvas');
-      return;
-    }
-
-    try {
-      // Clear previous content
-      textLayer.innerHTML = '';
-      console.log('🧹 Text layer cleared');
-
-      // Calculate responsive scale to fit container
-      const containerWidth = container.clientWidth - 40; // Account for padding
-      const viewport = currentPageObject.getViewport({ scale: 1.0 });
-      const calculatedScale = containerWidth / viewport.width;
-
-      console.log('🔍 Scaling calculation:', {
-        containerWidth,
-        pageWidth: viewport.width,
-        scale: calculatedScale,
-      });
-
-      // Get viewport with calculated scale
-      const scaledViewport = currentPageObject.getViewport({ scale: calculatedScale });
-
-      // High-DPI (Retina) display support
-      const dpr = window.devicePixelRatio || 1;
-      console.log('📍 Viewport:', {
-        width: scaledViewport.width,
-        height: scaledViewport.height,
-        devicePixelRatio: dpr,
-      });
-
-      // Set canvas INTERNAL dimensions for high-DPI rendering
-      // (multiply by device pixel ratio for crisp display on Retina screens)
-      canvas.width = scaledViewport.width * dpr;
-      canvas.height = scaledViewport.height * dpr;
-
-      // Set CSS dimensions to logical pixels (actual display size)
-      canvas.style.width = `${scaledViewport.width}px`;
-      canvas.style.height = `${scaledViewport.height}px`;
-
-      // Reset transform and scale the rendering context to match device pixel ratio
-      // (reset first to prevent compounding on re-renders)
-      context.setTransform(1, 0, 0, 1, 0, 0); // Reset to identity matrix
-      context.scale(dpr, dpr);
-
-      // Enable high-quality image smoothing for better rendering
-      context.imageSmoothingEnabled = true;
-      context.imageSmoothingQuality = 'high';
-
-      // Set text layer dimensions to match CSS size (logical pixels)
-      textLayer.style.width = `${scaledViewport.width}px`;
-      textLayer.style.height = `${scaledViewport.height}px`;
-      console.log('✅ Canvas and text layer dimensions set (high-DPI ready)');
-
-      // Render PDF page to canvas with high-DPI support
-      const renderContext = {
-        canvasContext: context,
-        viewport: scaledViewport,
-      };
-
-      console.log('⏳ Rendering PDF page to canvas...');
-      await currentPageObject.render(renderContext).promise;
-      console.log('✅ PDF page rendered to canvas');
-
-      // Extract and render text layer for selection
-      console.log('⏳ Getting text content for text layer...');
-      const textContent = await currentPageObject.getTextContent();
-      console.log('✅ Text content retrieved:', {
-        itemCount: textContent.items.length,
-      });
-
-      // Render text layer manually for selection support
-      console.log('⏳ Rendering text layer...');
-      const textItems = textContent.items as Array<{
-        str: string;
-        transform: number[];
-        width: number;
-        height: number;
-      }>;
-
-      // Scale text layer positioning to match viewport scale
-      textItems.forEach(item => {
-        const span = document.createElement('span');
-        span.textContent = item.str;
-        span.style.position = 'absolute';
-        span.style.left = `${item.transform[4]}px`;
-        span.style.top = `${item.transform[5]}px`;
-        span.style.fontSize = `${Math.sqrt(
-          item.transform[0] * item.transform[0] + item.transform[1] * item.transform[1]
-        )}px`;
-        span.style.fontFamily = 'sans-serif';
-        span.style.whiteSpace = 'pre'; // Preserve spacing
-        textLayer.appendChild(span);
-      });
-      console.log('✅ Text layer rendered');
-
-      // Call text extraction callback if provided
-      if (onTextExtracted) {
-        const textItems = textContent.items as Array<{ str: string; hasEOL?: boolean }>;
-        let pageText = '';
-        textItems.forEach(item => {
-          pageText += item.str;
-          if (item.hasEOL) {
-            pageText += '\n';
-          } else {
-            pageText += ' ';
-          }
-        });
-        onTextExtracted(pageText);
-        console.log('✅ Text extracted for callback:', {
-          length: pageText.length,
-          preview: pageText.substring(0, 50) + '...',
-        });
+    const updateWidth = () => {
+      if (containerRef.current) {
+        const available = containerRef.current.clientWidth - 40; // Account for padding
+        const effective = Math.min(available, MAX_PAGE_WIDTH);
+        setContainerWidth(effective);
       }
+    };
 
-      console.log('🎉 Page render completed successfully!');
-    } catch (err) {
-      console.error('❌ Failed to render page:', {
-        error: err,
-        stack: err instanceof Error ? err.stack : 'No stack trace',
-        currentPageNumber: currentPage,
-      });
-    }
-  }, [currentPageObject, onTextExtracted, currentPage]);
+    // Initial measurement
+    updateWidth();
+
+    // Update on resize
+    window.addEventListener('resize', updateWidth);
+    return () => window.removeEventListener('resize', updateWidth);
+  }, [pdfDocument]);
 
   // ===================================================================
   // Event Handlers
@@ -249,18 +119,23 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
   }, []);
 
   /**
-   * Handle page navigation via input field
+   * Handle page navigation via input field - scrolls to page
    */
   const handlePageInputSubmit = useCallback(
     (event: React.FormEvent) => {
       event.preventDefault();
       const pageNum = parseInt(pageInput, 10);
       if (pageNum >= 1 && pageNum <= totalPages) {
-        onGoToPage(pageNum);
+        // Scroll to the page
+        const pageElement = pageRefsMap.current.get(pageNum);
+        if (pageElement) {
+          pageElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+        onSetCurrentPage(pageNum);
       }
       setPageInput('');
     },
-    [pageInput, totalPages, onGoToPage]
+    [pageInput, totalPages, onSetCurrentPage]
   );
 
   // ===================================================================
@@ -268,43 +143,158 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
   // ===================================================================
 
   /**
-   * Handle window resize - re-render page with new scale
-   */
-  useEffect(() => {
-    const handleResize = () => {
-      if (currentPageObject) {
-        renderPage();
-      }
-    };
-
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, [currentPageObject, renderPage]);
-
-  /**
-   * Render page when current page object changes
-   */
-  useEffect(() => {
-    if (currentPageObject) {
-      renderPage();
-    }
-  }, [currentPageObject, renderPage]);
-
-  /**
-   * Notify parent component of page changes
-   */
-  useEffect(() => {
-    if (onPageChange) {
-      onPageChange(currentPage);
-    }
-  }, [currentPage, onPageChange]);
-
-  /**
    * Update page input field when current page changes
    */
   useEffect(() => {
     setPageInput(currentPage.toString());
   }, [currentPage]);
+
+  /**
+   * Handle page element ref - store for scroll management
+   */
+  const handlePageRef = useCallback((pageNum: number, element: HTMLDivElement | null) => {
+    if (element) {
+      pageRefsMap.current.set(pageNum, element);
+    } else {
+      pageRefsMap.current.delete(pageNum);
+    }
+  }, []);
+
+  /**
+   * Handle page visibility changes from Intersection Observer
+   */
+  const handlePageVisibilityChange = useCallback((pageNum: number, isVisible: boolean) => {
+    setVisiblePages(prev => {
+      const newSet = new Set(prev);
+      if (isVisible) {
+        newSet.add(pageNum);
+      } else {
+        newSet.delete(pageNum);
+      }
+      return newSet;
+    });
+  }, []);
+
+  /**
+   * Detect current page based on scroll position
+   */
+  useEffect(() => {
+    if (!containerRef.current || visiblePages.size === 0) return;
+
+    const handleScroll = () => {
+      // Debounce scroll updates
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+
+      scrollTimeoutRef.current = setTimeout(() => {
+        // Find the page closest to the top of the viewport
+        const container = containerRef.current;
+        if (!container) return;
+
+        const containerRect = container.getBoundingClientRect();
+        const containerTop = containerRect.top;
+
+        let closestPage = currentPage;
+        let minDistance = Infinity;
+
+        // Check all visible pages
+        visiblePages.forEach(pageNum => {
+          const pageElement = pageRefsMap.current.get(pageNum);
+          if (pageElement) {
+            const pageRect = pageElement.getBoundingClientRect();
+            const distance = Math.abs(pageRect.top - containerTop);
+
+            // Prefer pages that are at or above the viewport top
+            if (distance < minDistance && pageRect.top <= containerTop + 100) {
+              minDistance = distance;
+              closestPage = pageNum;
+            }
+          }
+        });
+
+        if (closestPage !== currentPage) {
+          onSetCurrentPage(closestPage);
+        }
+      }, 150); // Debounce delay
+    };
+
+    const container = containerRef.current;
+    container.addEventListener('scroll', handleScroll);
+
+    return () => {
+      container.removeEventListener('scroll', handleScroll);
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+    };
+  }, [visiblePages, currentPage, onSetCurrentPage]);
+
+  /**
+   * Keyboard shortcuts for navigation
+   */
+  useEffect(() => {
+    if (!pdfDocument) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Don't interfere with input fields
+      if (event.target instanceof HTMLInputElement) return;
+
+      const scrollToPage = (pageNum: number) => {
+        const pageElement = pageRefsMap.current.get(pageNum);
+        if (pageElement) {
+          pageElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      };
+
+      switch (event.key) {
+        case 'ArrowDown':
+          // Scroll down one page
+          if (currentPage < totalPages) {
+            event.preventDefault();
+            scrollToPage(currentPage + 1);
+          }
+          break;
+        case 'ArrowUp':
+          // Scroll up one page
+          if (currentPage > 1) {
+            event.preventDefault();
+            scrollToPage(currentPage - 1);
+          }
+          break;
+        case 'PageDown':
+          // Page Down key
+          if (currentPage < totalPages) {
+            event.preventDefault();
+            scrollToPage(currentPage + 1);
+          }
+          break;
+        case 'PageUp':
+          // Page Up key
+          if (currentPage > 1) {
+            event.preventDefault();
+            scrollToPage(currentPage - 1);
+          }
+          break;
+        case 'Home':
+          // Go to first page
+          event.preventDefault();
+          scrollToPage(1);
+          break;
+        case 'End':
+          // Go to last page
+          event.preventDefault();
+          scrollToPage(totalPages);
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [pdfDocument, currentPage, totalPages]);
 
   // ===================================================================
   // Render
@@ -356,68 +346,36 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
         {/* Navigation Controls (only visible when PDF is loaded) */}
         {pdfDocument && (
           <>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              {/* Previous Page Button */}
-              <button
-                onClick={onPrevPage}
-                disabled={currentPage <= 1}
+            {/* Page Number Input - Jump to page */}
+            <form
+              onSubmit={handlePageInputSubmit}
+              style={{ display: 'flex', alignItems: 'center', gap: '5px' }}
+            >
+              <span style={{ fontSize: '14px', color: '#666' }}>Page</span>
+              <input
+                type="number"
+                min="1"
+                max={totalPages}
+                value={pageInput}
+                onChange={handlePageInputChange}
                 style={{
-                  padding: '6px 12px',
-                  fontSize: '14px',
-                  cursor: currentPage <= 1 ? 'not-allowed' : 'pointer',
-                  opacity: currentPage <= 1 ? 0.5 : 1,
+                  width: '60px',
+                  padding: '4px',
+                  textAlign: 'center',
                   border: '1px solid #ddd',
                   borderRadius: '4px',
-                  backgroundColor: 'white',
-                }}
-              >
-                Previous
-              </button>
-
-              {/* Page Number Input */}
-              <form
-                onSubmit={handlePageInputSubmit}
-                style={{ display: 'flex', alignItems: 'center', gap: '5px' }}
-              >
-                <input
-                  type="number"
-                  min="1"
-                  max={totalPages}
-                  value={pageInput}
-                  onChange={handlePageInputChange}
-                  style={{
-                    width: '60px',
-                    padding: '4px',
-                    textAlign: 'center',
-                    border: '1px solid #ddd',
-                    borderRadius: '4px',
-                    fontSize: '14px',
-                  }}
-                />
-                <span style={{ fontSize: '14px', color: '#666' }}>of {totalPages}</span>
-              </form>
-
-              {/* Next Page Button */}
-              <button
-                onClick={onNextPage}
-                disabled={currentPage >= totalPages}
-                style={{
-                  padding: '6px 12px',
                   fontSize: '14px',
-                  cursor: currentPage >= totalPages ? 'not-allowed' : 'pointer',
-                  opacity: currentPage >= totalPages ? 0.5 : 1,
-                  border: '1px solid #ddd',
-                  borderRadius: '4px',
-                  backgroundColor: 'white',
                 }}
-              >
-                Next
-              </button>
-            </div>
+              />
+              <span style={{ fontSize: '14px', color: '#666' }}>of {totalPages}</span>
+            </form>
 
-            {/* Document Info */}
-            <div style={{ marginLeft: 'auto', fontSize: '14px', color: '#666' }}>
-              {pdfDocument.numPages} pages
+            {/* Document Info and Keyboard Shortcuts */}
+            <div
+              style={{ marginLeft: 'auto', fontSize: '12px', color: '#666', textAlign: 'right' }}
+            >
+              <div>{pdfDocument.numPages} pages</div>
+              <div style={{ fontSize: '11px', color: '#999' }}>↑↓ / PgUp/PgDn • Home/End</div>
             </div>
           </>
         )}
@@ -501,41 +459,26 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
           </div>
         )}
 
-        {/* PDF Rendering (Canvas + Text Layer) */}
-        {pdfDocument && currentPageObject && !loading && (
+        {/* PDF Rendering - All Pages (Continuous Scroll) */}
+        {pdfDocument && allPageObjects.length > 0 && !loading && (
           <div
             style={{
-              position: 'relative',
-              backgroundColor: 'white',
-              boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-              borderRadius: '4px',
-              overflow: 'hidden',
+              width: '100%',
+              maxWidth: '900px',
+              display: 'flex',
+              flexDirection: 'column',
             }}
           >
-            {/* Canvas for visual PDF rendering */}
-            <canvas
-              ref={canvasRef}
-              style={{
-                display: 'block',
-                maxWidth: '100%',
-              }}
-            />
-
-            {/* Text layer for selection (transparent overlay) */}
-            <div
-              ref={textLayerRef}
-              className="textLayer"
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                color: 'transparent',
-                transformOrigin: '0% 0%',
-                mixBlendMode: 'normal',
-                userSelect: 'text',
-                cursor: 'text',
-              }}
-            />
+            {allPageObjects.map((pageObject, index) => (
+              <PdfPage
+                key={`page-${index + 1}`}
+                page={pageObject}
+                pageNumber={index + 1}
+                containerWidth={containerWidth}
+                onPageRef={handlePageRef}
+                onVisibilityChange={handlePageVisibilityChange}
+              />
+            ))}
           </div>
         )}
       </div>
@@ -557,6 +500,7 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
           white-space: pre;
           cursor: text;
           transform-origin: 0% 0%;
+          line-height: 1;
         }
 
         /* Highlight style for selected text */

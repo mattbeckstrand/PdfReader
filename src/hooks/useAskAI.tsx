@@ -1,4 +1,5 @@
-import { AI_CONFIG, DEFAULT_AI_MODEL, ERROR_MESSAGES } from '@lib/constants';
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import { AI_CONFIG, DEFAULT_AI_MODEL, ERROR_MESSAGES, GEMINI_API_KEY } from '@lib/constants';
 import { useState } from 'react';
 
 interface UseAskAIResult {
@@ -10,7 +11,7 @@ interface UseAskAIResult {
 }
 
 /**
- * Hook for asking AI questions with context
+ * Hook for asking AI questions with context using Google Gemini
  * Simplified: Just takes question + context string (no embeddings, no vector search)
  */
 export function useAskAI(): UseAskAIResult {
@@ -24,6 +25,23 @@ export function useAskAI(): UseAskAIResult {
     setAnswer(null);
 
     try {
+      // Check for API key
+      if (!GEMINI_API_KEY) {
+        throw new Error(ERROR_MESSAGES.NO_API_KEY);
+      }
+
+      // Initialize Gemini
+      const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+      const model = genAI.getGenerativeModel({
+        model: DEFAULT_AI_MODEL,
+        generationConfig: {
+          temperature: AI_CONFIG.temperature,
+          maxOutputTokens: AI_CONFIG.maxTokens,
+          topP: AI_CONFIG.topP,
+        },
+      });
+
+      // Build the prompt
       const prompt = `You are helping someone read a PDF document. They highlighted some text and have a question about it.
 
 Context from the document:
@@ -37,32 +55,10 @@ Provide a clear, concise answer based on the context above.${
         pageNumber ? ` (This is from page ${pageNumber})` : ''
       }`;
 
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${import.meta.env.VITE_OPENAI_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: DEFAULT_AI_MODEL,
-          messages: [{ role: 'user', content: prompt }],
-          temperature: AI_CONFIG.temperature,
-          max_tokens: AI_CONFIG.maxTokens,
-        }),
-      });
-
-      if (!response.ok) {
-        if (response.status === 429) {
-          throw new Error(ERROR_MESSAGES.RATE_LIMIT_EXCEEDED);
-        }
-        if (response.status === 401) {
-          throw new Error(ERROR_MESSAGES.INVALID_API_KEY);
-        }
-        throw new Error(ERROR_MESSAGES.AI_REQUEST_FAILED);
-      }
-
-      const json = await response.json();
-      const answerText = json.choices?.[0]?.message?.content;
+      // Get response from Gemini
+      const result = await model.generateContent(prompt);
+      const response = result.response;
+      const answerText = response.text();
 
       if (!answerText) {
         throw new Error(ERROR_MESSAGES.AI_REQUEST_FAILED);
@@ -70,7 +66,19 @@ Provide a clear, concise answer based on the context above.${
 
       setAnswer(answerText);
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : ERROR_MESSAGES.AI_REQUEST_FAILED;
+      let errorMessage = ERROR_MESSAGES.AI_REQUEST_FAILED;
+
+      if (err instanceof Error) {
+        // Handle specific Gemini errors
+        if (err.message.includes('API_KEY')) {
+          errorMessage = ERROR_MESSAGES.INVALID_API_KEY;
+        } else if (err.message.includes('quota') || err.message.includes('429')) {
+          errorMessage = ERROR_MESSAGES.RATE_LIMIT_EXCEEDED;
+        } else {
+          errorMessage = err.message;
+        }
+      }
+
       setError(errorMessage);
       console.error('AI request failed:', err);
     } finally {

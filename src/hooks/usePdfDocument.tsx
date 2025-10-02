@@ -1,4 +1,3 @@
-import { cleanPdfText } from '@lib/chunking';
 import { ERROR_MESSAGES } from '@lib/constants';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -42,8 +41,8 @@ interface UsePdfDocumentResult {
   currentPage: number;
   totalPages: number;
 
-  // Current page data
-  pageText: string;
+  // All pages data
+  allPageObjects: PDFPageProxy[];
 
   // Loading and error states
   loading: boolean;
@@ -51,13 +50,10 @@ interface UsePdfDocumentResult {
 
   // Actions
   loadPdf: (file: File) => Promise<void>;
-  nextPage: () => void;
-  prevPage: () => void;
-  goToPage: (pageNum: number) => void;
+  setCurrentPage: (pageNum: number) => void;
 
   // For rendering
   pdfDocument: PDFDocumentProxy | null;
-  currentPageObject: PDFPageProxy | null;
 }
 
 // ===================================================================
@@ -65,15 +61,14 @@ interface UsePdfDocumentResult {
 // ===================================================================
 
 /**
- * Hook for managing PDF document loading, navigation, and text extraction
+ * Hook for managing PDF document loading with continuous scroll support
  *
  * Built for Electron + React + Vite using PDF.js legacy build for maximum
  * compatibility with Electron's security model (contextIsolation, sandbox).
  *
  * Features:
  * - Load PDF from File object
- * - Page-by-page navigation
- * - Text extraction with cleanup
+ * - Load all pages for continuous scrolling
  * - Proper memory management (cleanup on unmount)
  * - Worker-based rendering for performance
  */
@@ -84,114 +79,45 @@ export function usePdfDocument(): UsePdfDocumentResult {
 
   const [document, setDocument] = useState<PdfDocument | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageText, setPageText] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // PDF.js proxy objects
   const [pdfDocument, setPdfDocument] = useState<PDFDocumentProxy | null>(null);
-  const [currentPageObject, setCurrentPageObject] = useState<PDFPageProxy | null>(null);
+  const [allPageObjects, setAllPageObjects] = useState<PDFPageProxy[]>([]);
 
   // Refs for cleanup (to avoid stale closures)
   const pdfDocumentRef = useRef<PDFDocumentProxy | null>(null);
-  const currentPageRef = useRef<PDFPageProxy | null>(null);
+  const allPageObjectsRef = useRef<PDFPageProxy[]>([]);
 
   // ===================================================================
-  // Text Extraction
+  // Page Loading
   // ===================================================================
 
   /**
-   * Extract and clean text from a PDF page
-   * Handles text items, spacing, and end-of-line markers
+   * Load all pages from the PDF document at once
+   * This enables continuous scrolling through all pages
    */
-  const extractPageText = useCallback(async (page: PDFPageProxy): Promise<string> => {
-    console.log('📝 Extracting text from page...');
+  const loadAllPages = useCallback(async (pdfDoc: PDFDocumentProxy): Promise<PDFPageProxy[]> => {
+    console.log('📚 Loading all pages from PDF...');
+    const totalPages = pdfDoc.numPages;
+    const pagePromises: Promise<PDFPageProxy>[] = [];
+
+    // Create promises for all pages
+    for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+      pagePromises.push(pdfDoc.getPage(pageNum));
+    }
+
     try {
-      const textContent = await page.getTextContent();
-      console.log('📄 Text content received:', { itemCount: textContent.items.length });
-
-      // Build text string from text items
-      const textItems = textContent.items as Array<{ str: string; hasEOL?: boolean }>;
-      let pageText = '';
-
-      textItems.forEach(item => {
-        pageText += item.str;
-        // Add newline or space based on EOL marker
-        if (item.hasEOL) {
-          pageText += '\n';
-        } else {
-          pageText += ' ';
-        }
-      });
-
-      // Clean up the text (remove extra whitespace, normalize)
-      const cleanedText = cleanPdfText(pageText);
-      console.log('✅ Text extracted and cleaned:', {
-        originalLength: pageText.length,
-        cleanedLength: cleanedText.length,
-        preview: cleanedText.substring(0, 100) + '...',
-      });
-
-      return cleanedText;
+      console.log(`⏳ Loading ${totalPages} pages...`);
+      const pages = await Promise.all(pagePromises);
+      console.log(`✅ All ${totalPages} pages loaded successfully`);
+      return pages;
     } catch (err) {
-      console.error('❌ Failed to extract text from page:', err);
-      throw new Error(ERROR_MESSAGES.PDF_TEXT_EXTRACTION_FAILED);
+      console.error('❌ Failed to load all pages:', err);
+      throw new Error(ERROR_MESSAGES.PDF_LOAD_FAILED);
     }
   }, []);
-
-  // ===================================================================
-  // Page Management
-  // ===================================================================
-
-  /**
-   * Load and render a specific page
-   * Handles cleanup of previous page and text extraction
-   */
-  const loadPage = useCallback(
-    async (pageNum: number) => {
-      console.log('📖 Loading page:', pageNum);
-
-      if (!pdfDocument) {
-        console.warn('⚠️ No PDF document available');
-        return;
-      }
-
-      if (pageNum < 1 || pageNum > pdfDocument.numPages) {
-        console.warn('⚠️ Invalid page number:', { pageNum, totalPages: pdfDocument.numPages });
-        return;
-      }
-
-      try {
-        setLoading(true);
-        setError(null);
-
-        // Get the page proxy from PDF.js
-        console.log('⏳ Getting page from PDF document...');
-        const page = await pdfDocument.getPage(pageNum);
-        console.log('✅ Page object received');
-
-        // Extract text from the page
-        console.log('⏳ Extracting text from page...');
-        const text = await extractPageText(page);
-        console.log('✅ Page text extracted');
-
-        // Update state and refs
-        setCurrentPageObject(page);
-        currentPageRef.current = page;
-        setPageText(text);
-        setCurrentPage(pageNum);
-        console.log('🎉 Page loaded successfully:', pageNum);
-      } catch (err) {
-        const errorMessage =
-          err instanceof Error ? err.message : ERROR_MESSAGES.PDF_TEXT_EXTRACTION_FAILED;
-        setError(errorMessage);
-        console.error('❌ Failed to load page:', { pageNum, error: err });
-      } finally {
-        setLoading(false);
-      }
-    },
-    [pdfDocument, extractPageText] // Removed currentPageObject to prevent unnecessary recreations
-  );
 
   // ===================================================================
   // Document Loading
@@ -199,7 +125,7 @@ export function usePdfDocument(): UsePdfDocumentResult {
 
   /**
    * Load a PDF file into the viewer
-   * Creates PDF.js document proxy and extracts metadata
+   * Creates PDF.js document proxy, extracts metadata, and loads all pages
    */
   const loadPdf = useCallback(
     async (file: File) => {
@@ -215,8 +141,7 @@ export function usePdfDocument(): UsePdfDocumentResult {
       setError(null);
       setDocument(null);
       setPdfDocument(null);
-      setCurrentPageObject(null);
-      setPageText('');
+      setAllPageObjects([]);
       setCurrentPage(1);
 
       try {
@@ -227,16 +152,35 @@ export function usePdfDocument(): UsePdfDocumentResult {
 
         // Create PDF.js loading task
         console.log('⏳ Creating PDF.js loading task...');
-        const loadingTask = pdfjsLib.getDocument({
+        // Configure font handling differently for Electron vs Web builds
+        const isElectron = navigator.userAgent.toLowerCase().includes('electron');
+
+        const baseDocumentOptions = {
           data: new Uint8Array(arrayBuffer),
           // CMap support for Unicode characters
           cMapUrl: `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/cmaps/`,
           cMapPacked: true,
-          // Use system fonts when possible
-          useSystemFonts: true,
-          // Disable eval for security (important in Electron)
-          isEvalSupported: false,
-        });
+          // Provide standard fonts over HTTPS to avoid CORS/font fallback issues on web
+          standardFontDataUrl: `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/standard_fonts/`,
+        } as const;
+
+        const documentOptions = isElectron
+          ? {
+              ...baseDocumentOptions,
+              // Electron: allow system fonts and keep eval disabled for security
+              useSystemFonts: true,
+              isEvalSupported: false,
+            }
+          : {
+              ...baseDocumentOptions,
+              // Web: avoid system font substitution, allow eval for accurate font engine
+              useSystemFonts: false,
+              isEvalSupported: true,
+            };
+
+        console.log('🛠 PDF.js getDocument options', { isElectron, documentOptions });
+
+        const loadingTask = pdfjsLib.getDocument(documentOptions);
 
         // Track loading progress
         loadingTask.onProgress = (progress: { loaded: number; total: number }) => {
@@ -286,9 +230,11 @@ export function usePdfDocument(): UsePdfDocumentResult {
         pdfDocumentRef.current = pdfDoc;
         setDocument(pdfDocument);
 
-        // Load first page
-        console.log('⏳ Loading first page...');
-        await loadPage(1);
+        // Load all pages for continuous scrolling
+        console.log('⏳ Loading all pages...');
+        const pages = await loadAllPages(pdfDoc);
+        setAllPageObjects(pages);
+        allPageObjectsRef.current = pages;
         console.log('🎉 PDF loading completed successfully!');
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : ERROR_MESSAGES.PDF_LOAD_FAILED;
@@ -302,32 +248,7 @@ export function usePdfDocument(): UsePdfDocumentResult {
         setLoading(false);
       }
     },
-    [loadPage]
-  );
-
-  // ===================================================================
-  // Navigation Functions
-  // ===================================================================
-
-  const nextPage = useCallback(() => {
-    if (pdfDocument && currentPage < pdfDocument.numPages) {
-      loadPage(currentPage + 1);
-    }
-  }, [pdfDocument, currentPage, loadPage]);
-
-  const prevPage = useCallback(() => {
-    if (currentPage > 1) {
-      loadPage(currentPage - 1);
-    }
-  }, [currentPage, loadPage]);
-
-  const goToPage = useCallback(
-    (pageNum: number) => {
-      if (pdfDocument && pageNum >= 1 && pageNum <= pdfDocument.numPages) {
-        loadPage(pageNum);
-      }
-    },
-    [pdfDocument, loadPage]
+    [loadAllPages]
   );
 
   // ===================================================================
@@ -337,15 +258,25 @@ export function usePdfDocument(): UsePdfDocumentResult {
   /**
    * Clean up PDF.js objects on unmount ONLY
    * Important for preventing memory leaks
-   * Uses refs to avoid stale closures and prevent cleanup on page changes
+   * Uses refs to avoid stale closures
    */
   useEffect(() => {
     return () => {
       console.log('🧹 Component unmounting - cleaning up PDF resources');
-      if (currentPageRef.current) {
-        console.log('🧹 Cleanup: Destroying page object');
-        currentPageRef.current.cleanup();
+
+      // Cleanup all page objects
+      if (allPageObjectsRef.current.length > 0) {
+        console.log(`🧹 Cleanup: Destroying ${allPageObjectsRef.current.length} page objects`);
+        allPageObjectsRef.current.forEach((page, index) => {
+          try {
+            page.cleanup();
+          } catch (err) {
+            console.warn(`⚠️ Failed to cleanup page ${index + 1}:`, err);
+          }
+        });
       }
+
+      // Cleanup PDF document
       if (pdfDocumentRef.current) {
         console.log('🧹 Cleanup: Destroying PDF document');
         pdfDocumentRef.current.destroy();
@@ -363,8 +294,8 @@ export function usePdfDocument(): UsePdfDocumentResult {
     currentPage,
     totalPages: pdfDocument?.numPages || 0,
 
-    // Current page data
-    pageText,
+    // All pages for rendering
+    allPageObjects,
 
     // Loading and error states
     loading,
@@ -372,12 +303,9 @@ export function usePdfDocument(): UsePdfDocumentResult {
 
     // Actions
     loadPdf,
-    nextPage,
-    prevPage,
-    goToPage,
+    setCurrentPage,
 
     // For rendering
     pdfDocument,
-    currentPageObject,
   };
 }
