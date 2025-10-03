@@ -1,33 +1,41 @@
-import { contextBridge, ipcRenderer } from 'electron';
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const electron_1 = require("electron");
 // ============================================================================
 // API Implementation
 // ============================================================================
 const electronAPI = {
     pdf: {
-        open: (filePath) => ipcRenderer.invoke('pdf:open', filePath),
-        close: (documentId) => ipcRenderer.invoke('pdf:close', documentId),
-        getPage: (documentId, pageNumber) => ipcRenderer.invoke('pdf:get-page', { documentId, pageNumber }),
+        open: (filePath) => electron_1.ipcRenderer.invoke('pdf:open', filePath),
+        close: (documentId) => electron_1.ipcRenderer.invoke('pdf:close', documentId),
+        getPage: (documentId, pageNumber) => electron_1.ipcRenderer.invoke('pdf:get-page', { documentId, pageNumber }),
     },
     ai: {
-        ask: (question, context, pageNumber) => ipcRenderer.invoke('ai:ask', { question, context, pageNumber }),
-        embed: (text) => ipcRenderer.invoke('ai:embed', text),
-        search: (documentId, query, topK = 5) => ipcRenderer.invoke('ai:search', { documentId, query, topK }),
+        ask: (question, context, pageNumber) => electron_1.ipcRenderer.invoke('ai:ask', { question, context, pageNumber }),
+        embed: (text) => electron_1.ipcRenderer.invoke('ai:embed', text),
+        search: (documentId, query, topK = 5) => electron_1.ipcRenderer.invoke('ai:search', { documentId, query, topK }),
     },
     settings: {
-        get: (key) => ipcRenderer.invoke('settings:get', key),
-        set: (key, value) => ipcRenderer.invoke('settings:set', { key, value }),
+        get: (key) => electron_1.ipcRenderer.invoke('settings:get', key),
+        set: (key, value) => electron_1.ipcRenderer.invoke('settings:set', { key, value }),
     },
     file: {
-        read: (filePath) => ipcRenderer.invoke('file:read', filePath),
+        read: (filePath) => electron_1.ipcRenderer.invoke('file:read', filePath),
+    },
+    dialog: {
+        openFile: () => electron_1.ipcRenderer.invoke('dialog:openFile'),
     },
     system: {
         platform: process.platform,
-        openExternal: (url) => ipcRenderer.invoke('system:open-external', url),
+        openExternal: (url) => electron_1.ipcRenderer.invoke('system:open-external', url),
+    },
+    extract: {
+        region: (pdfPath, pageNumber, bbox, pythonPath) => electron_1.ipcRenderer.invoke('extract:region', { pdfPath, pageNumber, bbox, pythonPath }),
     },
 };
 // ============================================================================
 // Expose API to Renderer
 // ============================================================================
 // Expose the API to the renderer process via window.electronAPI
-contextBridge.exposeInMainWorld('electronAPI', electronAPI);
+electron_1.contextBridge.exposeInMainWorld('electronAPI', electronAPI);
 //# sourceMappingURL=preload.js.map

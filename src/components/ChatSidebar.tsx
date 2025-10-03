@@ -1,66 +1,68 @@
-import { ArrowUp } from 'lucide-react';
-import React, { useEffect, useRef, useState } from 'react';
+import 'katex/dist/katex.min.css';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
+import rehypeKatex from 'rehype-katex';
+import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
 
 // ===================================================================
-// Type Definitions
+// Types
 // ===================================================================
 
-interface Message {
+export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
   content: string;
-  timestamp: Date;
+  timestamp: number;
+  pageNumber?: number;
+  context?: string[];
 }
 
 interface ChatSidebarProps {
-  /** Whether the sidebar is visible */
-  isOpen: boolean;
-  /** Callback to close the sidebar */
-  onClose: () => void;
-  /** Current conversation messages */
-  messages: Message[];
-  /** Callback to send a message */
-  onSendMessage: (message: string) => void;
-  /** Loading state for AI response */
+  messages: ChatMessage[];
+  currentQuestion: string;
+  onQuestionChange: (question: string) => void;
+  onSend: () => void;
   isLoading: boolean;
-  /** Context preview to show in input area */
-  contextPreview?: string;
+  isOpen: boolean;
+  onToggle: () => void;
+  extractedText?: string;
+  extractedLatex?: string;
 }
 
 // ===================================================================
-// Component Implementation
+// Component
 // ===================================================================
 
-/**
- * Chat sidebar that slides in from the right
- *
- * Features:
- * - Slides in/out with smooth animation
- * - Shows conversation history
- * - Input field for asking follow-up questions
- * - Auto-scrolls to latest message
- * - Minimal dark design
- */
-const ChatSidebar: React.FC<ChatSidebarProps> = ({
-  isOpen,
-  onClose,
+export const ChatSidebar: React.FC<ChatSidebarProps> = ({
   messages,
-  onSendMessage,
+  currentQuestion,
+  onQuestionChange,
+  onSend,
   isLoading,
-  contextPreview,
+  isOpen,
+  onToggle,
+  extractedText,
+  extractedLatex,
 }) => {
-  // ===================================================================
-  // State & Refs
-  // ===================================================================
-
-  const [inputValue, setInputValue] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
+    try {
+      const stored = localStorage.getItem('chatSidebarWidth');
+      const parsed = stored ? parseInt(stored, 10) : 400;
+      if (!Number.isFinite(parsed)) return 400;
+      return Math.min(Math.max(parsed, 280), 800);
+    } catch {
+      return 400;
+    }
+  });
 
-  // ===================================================================
-  // Effects
-  // ===================================================================
+  const isResizingRef = useRef<boolean>(false);
+  const dragStartXRef = useRef<number>(0);
+  const startWidthRef = useRef<number>(0);
+  const MIN_WIDTH = 280;
+  const MAX_WIDTH = 800;
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -69,336 +71,352 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({
 
   // Focus input when sidebar opens
   useEffect(() => {
-    if (isOpen) {
-      inputRef.current?.focus();
+    if (isOpen && inputRef.current) {
+      inputRef.current.focus();
     }
   }, [isOpen]);
 
-  // Handle Escape key to close
+  // Cleanup listeners on unmount
   useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && isOpen) {
-        onClose();
-      }
+    return () => {
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', stopResizing);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '' as any;
     };
+  }, []);
 
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
+  const onMouseMove = useCallback((e: MouseEvent) => {
+    if (!isResizingRef.current) return;
+    const delta = dragStartXRef.current - e.clientX;
+    let next = startWidthRef.current + delta;
+    next = Math.min(Math.max(next, MIN_WIDTH), MAX_WIDTH);
+    setSidebarWidth(next);
+  }, []);
 
-  // ===================================================================
-  // Event Handlers
-  // ===================================================================
+  const stopResizing = useCallback(() => {
+    if (!isResizingRef.current) return;
+    isResizingRef.current = false;
+    document.removeEventListener('mousemove', onMouseMove);
+    document.removeEventListener('mouseup', stopResizing);
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '' as any;
+    try {
+      localStorage.setItem('chatSidebarWidth', String(sidebarWidth));
+    } catch {}
+  }, [onMouseMove, sidebarWidth]);
+
+  const startResizing = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      isResizingRef.current = true;
+      dragStartXRef.current = e.clientX;
+      startWidthRef.current = sidebarWidth;
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseup', stopResizing);
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none' as any;
+    },
+    [onMouseMove, stopResizing, sidebarWidth]
+  );
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const trimmedValue = inputValue.trim();
-    if (trimmedValue && !isLoading) {
-      onSendMessage(trimmedValue);
-      setInputValue('');
+    if (currentQuestion.trim() && !isLoading) {
+      onSend();
     }
   };
 
-  // ===================================================================
-  // Render
-  // ===================================================================
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Submit on Enter (without Shift)
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmit(e);
+    }
+  };
 
   return (
     <>
-      {/* Backdrop (darkens background when open) */}
-      {isOpen && (
-        <div
-          onClick={onClose}
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.3)',
-            zIndex: 998,
-            transition: 'opacity 0.3s',
-            opacity: isOpen ? 1 : 0,
-          }}
-        />
-      )}
+      {/* Toggle Button */}
+      <button
+        onClick={onToggle}
+        style={{
+          position: 'fixed',
+          top: '20px',
+          right: isOpen ? `${sidebarWidth + 20}px` : '20px',
+          zIndex: 1001,
+          width: '40px',
+          height: '40px',
+          borderRadius: '8px',
+          border: '1px solid #333',
+          background: '#1a1a1a',
+          color: '#fff',
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: '18px',
+          transition: 'all 0.3s ease',
+          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3)',
+        }}
+        title={isOpen ? 'Close chat' : 'Open chat'}
+      >
+        {isOpen ? '✕' : '💬'}
+      </button>
 
-      {/* Sidebar Panel */}
+      {/* Sidebar */}
       <div
         style={{
           position: 'fixed',
           top: 0,
           right: 0,
-          bottom: 0,
-          width: '400px',
-          backgroundColor: '#0a0a0a',
+          width: `${sidebarWidth}px`,
+          height: '100vh',
+          background: '#0a0a0a',
           borderLeft: '1px solid #1a1a1a',
-          boxShadow: '-4px 0 20px rgba(0, 0, 0, 0.5)',
-          zIndex: 999,
           display: 'flex',
           flexDirection: 'column',
           transform: isOpen ? 'translateX(0)' : 'translateX(100%)',
-          transition: 'transform 0.3s ease-in-out',
+          transition: 'transform 0.3s ease',
+          zIndex: 1000,
+          boxShadow: isOpen ? '-4px 0 24px rgba(0, 0, 0, 0.5)' : 'none',
         }}
       >
+        {/* Resizer Handle (left edge) */}
+        <div
+          onMouseDown={startResizing}
+          style={{
+            position: 'absolute',
+            left: 0,
+            top: 0,
+            width: '6px',
+            height: '100%',
+            cursor: 'col-resize',
+            zIndex: 1001,
+            background: 'linear-gradient(to right, rgba(255,255,255,0.06), rgba(255,255,255,0))',
+          }}
+          title="Drag to resize"
+        />
         {/* Header */}
         <div
           style={{
-            padding: '20px 24px',
+            padding: '16px 20px',
             borderBottom: '1px solid #1a1a1a',
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'space-between',
-            backgroundColor: '#0a0a0a',
+            gap: '10px',
           }}
         >
-          <h2
-            style={{
-              margin: 0,
-              fontSize: '14px',
-              fontWeight: 300,
-              color: '#888',
-              letterSpacing: '0.5px',
-            }}
-          >
-            AI Assistant
-          </h2>
-          <button
-            onClick={onClose}
-            style={{
-              background: 'none',
-              border: '1px solid #333',
-              borderRadius: '8px',
-              fontSize: '18px',
-              cursor: 'pointer',
-              color: '#666',
-              padding: '0',
-              width: '28px',
-              height: '28px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              transition: 'all 0.15s',
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.backgroundColor = '#ffffff';
-              e.currentTarget.style.color = '#000';
-              e.currentTarget.style.borderColor = '#ffffff';
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.backgroundColor = 'transparent';
-              e.currentTarget.style.color = '#666';
-              e.currentTarget.style.borderColor = '#333';
-            }}
-          >
-            ×
-          </button>
+          <span style={{ fontSize: '18px' }}>💬</span>
+          <span style={{ fontSize: '14px', fontWeight: '500', color: '#fff' }}>AI Chat</span>
+          {messages.length > 0 && (
+            <span
+              style={{
+                marginLeft: 'auto',
+                fontSize: '12px',
+                color: '#666',
+              }}
+            >
+              {messages.length} message{messages.length !== 1 ? 's' : ''}
+            </span>
+          )}
         </div>
 
-        {/* Messages Container */}
+        {/* Context Display */}
+        {(extractedText || extractedLatex) && (
+          <div
+            style={{
+              padding: '12px 16px',
+              background: 'rgba(10, 122, 255, 0.05)',
+              borderBottom: '1px solid rgba(10, 122, 255, 0.2)',
+              fontSize: '12px',
+            }}
+          >
+            <div style={{ color: '#0af', marginBottom: '6px', fontWeight: '500' }}>
+              📎 Selected Context
+            </div>
+            {extractedText && (
+              <div
+                style={{
+                  color: '#aaa',
+                  whiteSpace: 'pre-wrap',
+                  maxHeight: '100px',
+                  overflow: 'auto',
+                  lineHeight: '1.4',
+                }}
+              >
+                {extractedText.substring(0, 200)}
+                {extractedText.length > 200 ? '...' : ''}
+              </div>
+            )}
+            {extractedLatex && (
+              <div
+                style={{
+                  marginTop: '8px',
+                  padding: '8px',
+                  background: 'rgba(139, 92, 246, 0.1)',
+                  borderRadius: '4px',
+                  border: '1px solid rgba(139, 92, 246, 0.2)',
+                }}
+              >
+                <div style={{ color: '#a78bfa', fontSize: '11px', marginBottom: '6px' }}>
+                  LaTeX Extracted:
+                </div>
+                <ReactMarkdown
+                  remarkPlugins={[remarkMath]}
+                  rehypePlugins={[rehypeKatex]}
+                  components={{
+                    p: ({ children }: any) => (
+                      <div style={{ color: '#e0d0ff', fontSize: '13px', margin: 0 }}>
+                        {children}
+                      </div>
+                    ),
+                  }}
+                >
+                  {extractedLatex}
+                </ReactMarkdown>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Messages */}
         <div
           style={{
             flex: 1,
             overflowY: 'auto',
-            padding: '24px',
+            padding: '16px',
             display: 'flex',
             flexDirection: 'column',
             gap: '16px',
           }}
         >
-          {messages.length === 0 && (
+          {messages.length === 0 ? (
             <div
               style={{
+                flex: 1,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#555',
                 textAlign: 'center',
-                color: '#666',
-                marginTop: '60px',
+                padding: '40px 20px',
               }}
             >
-              <p
-                style={{
-                  fontSize: '13px',
-                  fontWeight: '300',
-                  letterSpacing: '0.3px',
-                  marginBottom: '8px',
-                }}
-              >
-                Highlight text to start
-              </p>
+              <div style={{ fontSize: '48px', marginBottom: '16px' }}>💬</div>
+              <div style={{ fontSize: '14px', marginBottom: '8px', color: '#888' }}>
+                No messages yet
+              </div>
+              <div style={{ fontSize: '12px', color: '#555', lineHeight: '1.6' }}>
+                Select text in the PDF and ask a question to get started
+              </div>
             </div>
-          )}
-
-          {messages.map(message => {
-            // Check if this is a context message
-            const isContextMessage =
-              message.role === 'user' && message.content.startsWith('📄 Context:');
-
-            return (
+          ) : (
+            messages.map(msg => (
               <div
-                key={message.id}
+                key={msg.id}
                 style={{
                   display: 'flex',
                   flexDirection: 'column',
-                  alignItems: message.role === 'user' ? 'flex-end' : 'flex-start',
+                  gap: '8px',
                 }}
               >
+                {/* Message Header */}
                 <div
                   style={{
-                    maxWidth: isContextMessage ? '100%' : '85%',
-                    padding: isContextMessage ? '10px 14px' : '14px 18px',
-                    borderRadius: '12px',
-                    backgroundColor: isContextMessage
-                      ? 'transparent'
-                      : message.role === 'user'
-                      ? '#1a1a1a'
-                      : '#0f0f0f',
-                    border: isContextMessage
-                      ? '1px solid #1a1a1a'
-                      : message.role === 'user'
-                      ? '1px solid #333'
-                      : '1px solid #1a1a1a',
-                    color: isContextMessage ? '#555' : message.role === 'user' ? '#fff' : '#888',
-                    fontSize: isContextMessage ? '11px' : '13px',
-                    lineHeight: '1.6',
-                    fontWeight: '300',
-                    wordWrap: 'break-word',
-                    fontStyle: isContextMessage ? 'italic' : 'normal',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    fontSize: '12px',
                   }}
                 >
-                  {message.role === 'assistant' ? (
+                  <span style={{ fontSize: '16px' }}>{msg.role === 'user' ? '👤' : '🤖'}</span>
+                  <span style={{ fontWeight: '500', color: msg.role === 'user' ? '#0af' : '#8c8' }}>
+                    {msg.role === 'user' ? 'You' : 'Assistant'}
+                  </span>
+                  {msg.pageNumber && (
+                    <span style={{ color: '#555', fontSize: '11px' }}>· Page {msg.pageNumber}</span>
+                  )}
+                  <span style={{ marginLeft: 'auto', color: '#555', fontSize: '11px' }}>
+                    {new Date(msg.timestamp).toLocaleTimeString()}
+                  </span>
+                </div>
+
+                {/* Message Content */}
+                <div
+                  style={{
+                    background: msg.role === 'user' ? '#1a1a1a' : '#0f0f0f',
+                    border: `1px solid ${msg.role === 'user' ? '#222' : '#1a1a1a'}`,
+                    borderRadius: '8px',
+                    padding: '12px',
+                    fontSize: '13px',
+                    lineHeight: '1.6',
+                    color: '#eee',
+                  }}
+                >
+                  {msg.role === 'user' ? (
+                    <div style={{ whiteSpace: 'pre-wrap' }}>{msg.content}</div>
+                  ) : (
                     <ReactMarkdown
+                      remarkPlugins={[remarkGfm, remarkMath]}
+                      rehypePlugins={[rehypeKatex]}
                       components={{
-                        // Style headings
-                        h1: ({ node, ...props }) => (
-                          <h1
-                            style={{
-                              fontSize: '18px',
-                              fontWeight: 'bold',
-                              marginTop: '12px',
-                              marginBottom: '8px',
-                            }}
-                            {...props}
-                          />
-                        ),
-                        h2: ({ node, ...props }) => (
-                          <h2
-                            style={{
-                              fontSize: '16px',
-                              fontWeight: 'bold',
-                              marginTop: '10px',
-                              marginBottom: '6px',
-                            }}
-                            {...props}
-                          />
-                        ),
-                        h3: ({ node, ...props }) => (
-                          <h3
-                            style={{
-                              fontSize: '14px',
-                              fontWeight: 'bold',
-                              marginTop: '8px',
-                              marginBottom: '4px',
-                            }}
-                            {...props}
-                          />
-                        ),
-                        // Style lists
-                        ul: ({ node, ...props }) => (
-                          <ul
-                            style={{ marginLeft: '20px', marginTop: '8px', marginBottom: '8px' }}
-                            {...props}
-                          />
-                        ),
-                        ol: ({ node, ...props }) => (
-                          <ol
-                            style={{ marginLeft: '20px', marginTop: '8px', marginBottom: '8px' }}
-                            {...props}
-                          />
-                        ),
-                        li: ({ node, ...props }) => (
-                          <li style={{ marginBottom: '4px' }} {...props} />
-                        ),
-                        // Style paragraphs
-                        p: ({ node, ...props }) => (
-                          <p style={{ marginTop: '8px', marginBottom: '8px' }} {...props} />
-                        ),
                         // Style code blocks
-                        code: ({ node, className, children, ...props }: any) => {
-                          const isInline = !className;
-                          return isInline ? (
+                        code: ({ node, inline, className, children, ...props }: any) => {
+                          return inline ? (
                             <code
                               style={{
-                                backgroundColor: 'rgba(255,255,255,0.1)',
-                                padding: '2px 4px',
-                                borderRadius: '3px',
-                                fontSize: '13px',
+                                background: '#1a1a1a',
+                                padding: '2px 6px',
+                                borderRadius: '4px',
+                                fontSize: '12px',
+                                fontFamily: 'monospace',
                               }}
                               {...props}
                             >
                               {children}
                             </code>
                           ) : (
-                            <code
+                            <pre
                               style={{
-                                display: 'block',
-                                backgroundColor: 'rgba(255,255,255,0.1)',
-                                padding: '8px',
-                                borderRadius: '4px',
-                                fontSize: '13px',
-                                overflowX: 'auto',
-                                marginTop: '8px',
-                                marginBottom: '8px',
+                                background: '#1a1a1a',
+                                padding: '12px',
+                                borderRadius: '6px',
+                                overflow: 'auto',
+                                fontSize: '12px',
+                                fontFamily: 'monospace',
                               }}
-                              className={className}
-                              {...props}
                             >
-                              {children}
-                            </code>
+                              <code {...props}>{children}</code>
+                            </pre>
                           );
                         },
-                        // Style strong/bold
-                        strong: ({ node, ...props }) => (
-                          <strong style={{ fontWeight: '600' }} {...props} />
+                        // Style links
+                        a: ({ children, ...props }: any) => (
+                          <a style={{ color: '#0af', textDecoration: 'none' }} {...props}>
+                            {children}
+                          </a>
                         ),
-                        // Style blockquotes
-                        blockquote: ({ node, ...props }) => (
-                          <blockquote
-                            style={{
-                              borderLeft: '3px solid #333',
-                              paddingLeft: '12px',
-                              marginLeft: '0',
-                              fontStyle: 'italic',
-                              color: '#666',
-                            }}
-                            {...props}
-                          />
+                        // Style lists
+                        ul: ({ children, ...props }: any) => (
+                          <ul style={{ marginLeft: '20px', marginTop: '8px' }} {...props}>
+                            {children}
+                          </ul>
+                        ),
+                        ol: ({ children, ...props }: any) => (
+                          <ol style={{ marginLeft: '20px', marginTop: '8px' }} {...props}>
+                            {children}
+                          </ol>
                         ),
                       }}
                     >
-                      {message.content}
+                      {msg.content}
                     </ReactMarkdown>
-                  ) : (
-                    message.content
                   )}
                 </div>
-                <span
-                  style={{
-                    fontSize: '10px',
-                    color: '#444',
-                    marginTop: '4px',
-                    fontWeight: '300',
-                    letterSpacing: '0.3px',
-                    paddingLeft: message.role === 'user' ? '0' : '8px',
-                    paddingRight: message.role === 'user' ? '8px' : '0',
-                  }}
-                >
-                  {message.timestamp.toLocaleTimeString([], {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
-                </span>
               </div>
-            );
-          })}
+            ))
+          )}
 
           {/* Loading Indicator */}
           {isLoading && (
@@ -406,28 +424,30 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: '10px',
+                gap: '8px',
                 color: '#666',
                 fontSize: '13px',
-                fontWeight: '300',
-                letterSpacing: '0.3px',
               }}
             >
+              <span style={{ fontSize: '16px' }}>🤖</span>
+              <span>Thinking...</span>
               <div
                 style={{
-                  width: '16px',
-                  height: '16px',
-                  border: '1px solid #333',
-                  borderTop: '1px solid #fff',
-                  borderRadius: '50%',
-                  animation: 'spin 1s linear infinite',
+                  display: 'flex',
+                  gap: '4px',
                 }}
-              />
-              <span>Processing...</span>
+              >
+                <span className="dot-pulse">●</span>
+                <span className="dot-pulse" style={{ animationDelay: '0.2s' }}>
+                  ●
+                </span>
+                <span className="dot-pulse" style={{ animationDelay: '0.4s' }}>
+                  ●
+                </span>
+              </div>
             </div>
           )}
 
-          {/* Auto-scroll anchor */}
           <div ref={messagesEndRef} />
         </div>
 
@@ -435,124 +455,85 @@ const ChatSidebar: React.FC<ChatSidebarProps> = ({
         <form
           onSubmit={handleSubmit}
           style={{
-            padding: '24px 24px 28px',
+            padding: '16px',
             borderTop: '1px solid #1a1a1a',
-            backgroundColor: '#0a0a0a',
+            background: '#0a0a0a',
           }}
         >
-          {/* Context Preview */}
-          {contextPreview && (
-            <div
-              style={{
-                padding: '12px 14px',
-                marginBottom: '14px',
-                backgroundColor: 'transparent',
-                border: '1px solid #1a1a1a',
-                borderRadius: '10px',
-                fontSize: '11px',
-                color: '#777',
-                fontStyle: 'italic',
-                letterSpacing: '0.3px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-              }}
-            >
-              <span>📄</span>
-              <span
-                style={{
-                  flex: 1,
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                Context: "{contextPreview}"
-              </span>
-            </div>
-          )}
-
-          <div style={{ display: 'flex', gap: '10px' }}>
-            <input
+          <div
+            style={{
+              display: 'flex',
+              gap: '8px',
+              alignItems: 'flex-end',
+            }}
+          >
+            <textarea
               ref={inputRef}
-              type="text"
-              value={inputValue}
-              onChange={e => setInputValue(e.target.value)}
-              placeholder={contextPreview ? 'Ask about this text...' : 'Ask...'}
+              value={currentQuestion}
+              onChange={e => onQuestionChange(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Ask about the selected text..."
               disabled={isLoading}
               style={{
                 flex: 1,
-                padding: '12px 16px',
+                background: '#1a1a1a',
                 border: '1px solid #333',
-                borderRadius: '10px',
-                fontSize: '13px',
-                fontWeight: '300',
-                letterSpacing: '0.3px',
-                outline: 'none',
-                backgroundColor: '#0a0a0a',
+                borderRadius: '8px',
+                padding: '10px 12px',
                 color: '#fff',
-                transition: 'border-color 0.15s',
+                fontSize: '13px',
+                fontFamily: 'inherit',
+                resize: 'none',
+                minHeight: '44px',
+                maxHeight: '120px',
+                lineHeight: '1.4',
               }}
-              onFocus={e => {
-                e.currentTarget.style.borderColor = '#666';
-              }}
-              onBlur={e => {
-                e.currentTarget.style.borderColor = '#333';
-              }}
+              rows={1}
             />
-            <style>{`
-              input::placeholder {
-                color: #777;
-                opacity: 1;
-              }
-            `}</style>
             <button
               type="submit"
-              disabled={isLoading || !inputValue.trim()}
+              disabled={isLoading || !currentQuestion.trim()}
               style={{
-                padding: '0',
-                width: '40px',
-                height: '40px',
-                backgroundColor: isLoading || !inputValue.trim() ? '#1a1a1a' : '#fff',
-                color: isLoading || !inputValue.trim() ? '#555' : '#000',
-                border: '1px solid #333',
-                borderRadius: '50%',
-                cursor: isLoading || !inputValue.trim() ? 'not-allowed' : 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                transition: 'all 0.15s',
-                flexShrink: 0,
-              }}
-              onMouseEnter={e => {
-                if (!isLoading && inputValue.trim()) {
-                  e.currentTarget.style.backgroundColor = '#ffffff';
-                  e.currentTarget.style.borderColor = '#ffffff';
-                }
-              }}
-              onMouseLeave={e => {
-                if (!isLoading && inputValue.trim()) {
-                  e.currentTarget.style.backgroundColor = '#fff';
-                  e.currentTarget.style.borderColor = '#333';
-                }
+                background: currentQuestion.trim() && !isLoading ? '#0a7aff' : '#333',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '8px',
+                padding: '10px 16px',
+                cursor: currentQuestion.trim() && !isLoading ? 'pointer' : 'not-allowed',
+                fontSize: '13px',
+                fontWeight: '500',
+                transition: 'all 0.2s',
+                height: '44px',
               }}
             >
-              <ArrowUp size={18} strokeWidth={2} />
+              {isLoading ? '...' : '→'}
             </button>
           </div>
+          <div
+            style={{
+              marginTop: '8px',
+              fontSize: '11px',
+              color: '#555',
+              textAlign: 'center',
+            }}
+          >
+            Press Enter to send · Shift+Enter for new line
+          </div>
         </form>
-
-        {/* Inline CSS for spinner animation */}
-        <style>{`
-          @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-          }
-        `}</style>
       </div>
+
+      {/* Animation Styles */}
+      <style>
+        {`
+          @keyframes dot-pulse {
+            0%, 100% { opacity: 0.3; }
+            50% { opacity: 1; }
+          }
+          .dot-pulse {
+            animation: dot-pulse 1.4s infinite;
+          }
+        `}
+      </style>
     </>
   );
 };
-
-export default ChatSidebar;
-export type { Message };
