@@ -223,7 +223,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
           display: 'flex',
           alignItems: 'center',
           gap: '8px',
-          color: '#fff',
+          color: 'var(--text-1)',
           fontSize: '14px',
           fontWeight: 500,
           transition: 'all 0.2s ease',
@@ -267,10 +267,11 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
           width: `${chatSize.width}px`,
           height: `${chatSize.height}px`,
           zIndex: 1000,
-          background: '#0a0a0a',
+          background: 'var(--surface-1)',
           backdropFilter: 'blur(20px)',
           borderRadius: '16px',
-          boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.1)',
+          boxShadow: 'var(--shadow-2)',
+          border: '1px solid var(--stroke-1)',
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
@@ -330,7 +331,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
             style={{
               background: 'rgba(0, 0, 0, 0.4)',
               border: '1px solid rgba(255, 255, 255, 0.1)',
-              color: '#aaa',
+              color: 'var(--text-muted)',
               cursor: 'pointer',
               padding: '6px',
               borderRadius: '6px',
@@ -359,7 +360,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
             style={{
               background: 'rgba(0, 0, 0, 0.4)',
               border: '1px solid rgba(255, 255, 255, 0.1)',
-              color: '#aaa',
+              color: 'var(--text-muted)',
               cursor: 'pointer',
               padding: '6px',
               borderRadius: '6px',
@@ -431,7 +432,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                       padding: '8px 0',
                       fontSize: '13px',
                       lineHeight: '1.5',
-                      color: '#eee',
+                      color: 'var(--text-1)',
                       wordBreak: 'break-word',
                       overflowWrap: 'break-word',
                       maxWidth: '85%',
@@ -449,7 +450,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                           paddingTop: msg.context && msg.context.length > 0 ? '40px' : '12px',
                           whiteSpace: 'pre-wrap',
                           position: 'relative',
-                          color: '#fff',
+                          color: 'var(--text-1)',
                         }}
                       >
                         {/* Context indicator inside user message bubble */}
@@ -469,7 +470,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                                 alignItems: 'center',
                                 gap: '4px',
                                 fontSize: '10px',
-                                color: '#aaa',
+                                color: 'var(--text-muted)',
                                 cursor: 'pointer',
                                 transition: 'all 0.15s ease',
                               }}
@@ -528,7 +529,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                                   <div
                                     key={idx}
                                     style={{
-                                      color: '#aaa',
+                                      color: 'var(--text-muted)',
                                       lineHeight: '1.4',
                                       whiteSpace: 'pre-wrap',
                                       marginBottom: idx < msg.context!.length - 1 ? '8px' : '0',
@@ -586,7 +587,10 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                           },
                           // Style links
                           a: ({ children, ...props }: any) => (
-                            <a style={{ color: '#0af', textDecoration: 'none' }} {...props}>
+                            <a
+                              style={{ color: 'var(--accent)', textDecoration: 'none' }}
+                              {...props}
+                            >
                               {children}
                             </a>
                           ),
@@ -660,7 +664,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                                 borderLeft: '2px solid #444',
                                 paddingLeft: '8px',
                                 margin: '4px 0',
-                                color: '#aaa',
+                                color: 'var(--text-muted)',
                               }}
                               {...props}
                             >
@@ -685,7 +689,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                 display: 'flex',
                 alignItems: 'center',
                 gap: '4px',
-                color: '#666',
+                color: 'var(--text-muted)',
                 fontSize: '8px',
                 padding: '0',
                 marginTop: '-4px',
@@ -714,8 +718,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
             right: 0,
             padding: '16px',
             paddingTop: '12px',
-            background: '#0a0a0a',
-            borderTop: '1px solid rgba(255, 255, 255, 0.05)',
+            background: 'var(--surface-1)',
           }}
         >
           <div
@@ -723,10 +726,10 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
               position: 'relative',
               display: 'flex',
               alignItems: 'flex-end',
-              background: 'linear-gradient(180deg, #0e0e10, #0b0b0d)',
-              border: '1px solid #2a2a2a',
-              borderRadius: '10px',
-              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)',
+              background: 'var(--surface-2)',
+              border: '1px solid var(--stroke-1)',
+              borderRadius: 'var(--radius-md)',
+              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.02)',
             }}
           >
             {/* Context indicator inside input box */}
@@ -749,7 +752,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                     alignItems: 'center',
                     gap: '4px',
                     fontSize: '10px',
-                    color: '#aaa',
+                    color: 'var(--text-muted)',
                     cursor: 'pointer',
                     transition: 'all 0.15s ease',
                     position: 'relative',
@@ -849,7 +852,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                       <div
                         key={idx}
                         style={{
-                          color: '#aaa',
+                          color: 'var(--text-muted)',
                           lineHeight: '1.4',
                           whiteSpace: 'pre-wrap',
                           marginBottom: idx < activeContextData.length - 1 ? '8px' : '0',
@@ -882,7 +885,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                 padding: '12px 14px',
                 paddingTop: hasActiveContext ? '36px' : '12px',
                 paddingRight: '52px',
-                color: '#fff',
+                color: 'var(--text-1)',
                 fontSize: '13px',
                 fontFamily: 'inherit',
                 resize: 'none',
@@ -899,8 +902,9 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                 position: 'absolute',
                 right: '8px',
                 bottom: '8px',
-                background: currentQuestion.trim() && !isLoading ? '#fff' : '#2a2a2a',
-                color: currentQuestion.trim() && !isLoading ? '#000' : '#666',
+                background:
+                  currentQuestion.trim() && !isLoading ? 'var(--text-1)' : 'var(--surface-3)',
+                color: currentQuestion.trim() && !isLoading ? 'var(--bg)' : 'var(--text-muted)',
                 border: 'none',
                 borderRadius: '50%',
                 padding: 0,
@@ -912,7 +916,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                 width: '26px',
                 height: '26px',
                 boxShadow:
-                  currentQuestion.trim() && !isLoading ? '0 2px 8px rgba(255,255,255,0.2)' : 'none',
+                  currentQuestion.trim() && !isLoading ? '0 2px 8px rgba(0,0,0,0.15)' : 'none',
               }}
               title={isLoading ? 'Sending...' : 'Send message'}
               aria-label="Send message"
