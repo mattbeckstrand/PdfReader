@@ -5,7 +5,7 @@
  * in the renderer process
  */
 
-import type { AiAnswer, PdfDocument, PdfPage, VectorSearchResult } from './index';
+import type { PdfDocument, PdfPage, VectorSearchResult } from './index';
 
 export interface FileReadResult {
   success: boolean;
@@ -13,6 +13,19 @@ export interface FileReadResult {
   name?: string;
   path?: string;
   error?: string;
+}
+
+export interface StreamChunk {
+  requestId: string;
+  chunk: string;
+  done: boolean;
+  pageNumber?: number;
+}
+
+export interface ConversationMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  pageNumber?: number;
 }
 
 export interface ElectronAPI {
@@ -25,7 +38,14 @@ export interface ElectronAPI {
 
   // AI operations
   ai: {
-    ask: (question: string, context: string[], pageNumber?: number) => Promise<AiAnswer>;
+    ask: (
+      question: string,
+      context: string[],
+      pageNumber?: number,
+      imageBase64?: string,
+      conversationHistory?: ConversationMessage[]
+    ) => Promise<{ requestId: string }>;
+    onStreamChunk: (callback: (data: StreamChunk) => void) => () => void;
     embed: (text: string) => Promise<number[]>;
     search: (documentId: string, query: string, topK?: number) => Promise<VectorSearchResult[]>;
   };

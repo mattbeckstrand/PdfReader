@@ -49,6 +49,8 @@ export interface RegionSelection {
   scaleFactor: number;
   // Timestamp of when the selection was made
   timestamp: number;
+  // Base64 PNG screenshot of the selected region (for multimodal AI)
+  imageBase64?: string;
 }
 
 // ============================================================================

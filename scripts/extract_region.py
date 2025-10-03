@@ -30,11 +30,35 @@ def extract_text(pdf_path: str, page_number: int, rect: fitz.Rect) -> str:
         page = doc[page_number - 1]
         return page.get_text("text", clip=rect) or ""
 
-def render_region_png(pdf_path: str, page_number: int, rect: fitz.Rect, scale: float = 2.0) -> bytes:
+def render_region_png(pdf_path: str, page_number: int, rect: fitz.Rect, scale: float = 2.0, padding: float = 10.0) -> bytes:
+    """
+    Render a region of a PDF page to PNG with optional padding.
+
+    Args:
+        pdf_path: Path to the PDF file
+        page_number: Page number (1-indexed)
+        rect: Rectangle defining the region to extract
+        scale: Scale factor for rendering (higher = better quality)
+        padding: Padding in points to add around the region (helps OCR accuracy)
+    """
     with fitz.open(pdf_path) as doc:
         page = doc[page_number - 1]
+
+        # Add padding to the rectangle, but stay within page bounds
+        page_rect = page.rect
+        padded_rect = fitz.Rect(
+            max(rect.x0 - padding, page_rect.x0),
+            max(rect.y0 - padding, page_rect.y0),
+            min(rect.x1 + padding, page_rect.x1),
+            min(rect.y1 + padding, page_rect.y1)
+        )
+
+        sys.stderr.write(f"[RENDER] Original rect: {rect}\n")
+        sys.stderr.write(f"[RENDER] Padded rect: {padded_rect}\n")
+        sys.stderr.write(f"[RENDER] Padding added: {padding}pt\n")
+
         m = fitz.Matrix(scale, scale)
-        pix = page.get_pixmap(matrix=m, clip=rect, alpha=False)
+        pix = page.get_pixmap(matrix=m, clip=padded_rect, alpha=False)
         png_bytes = pix.tobytes("png")
 
         # Save debug image to temp directory for inspection
@@ -44,6 +68,7 @@ def render_region_png(pdf_path: str, page_number: int, rect: fitz.Rect, scale: f
             with open(debug_path, "wb") as f:
                 f.write(png_bytes)
             sys.stderr.write(f"[DEBUG] Saved extraction image to: {debug_path}\n")
+            sys.stderr.write(f"[DEBUG] Image dimensions: {pix.width}x{pix.height}\n")
         except Exception as e:
             sys.stderr.write(f"[DEBUG] Could not save debug image: {e}\n")
 
@@ -70,6 +95,12 @@ def ocr_mathpix(png_bytes: bytes) -> Dict[str, Any]:
             "src": f"data:image/png;base64,{img_b64}",
             "formats": ["text", "latex_styled"],
             "rm_spaces": True,
+            # Additional parameters to improve equation recognition
+            "math_inline_delimiters": ["$", "$"],
+            "math_display_delimiters": ["$$", "$$"],
+            # Tell MathPix this is likely math content
+            "include_asciimath": False,
+            "include_latex": True,
         }
 
         sys.stderr.write("[MATHPIX] Sending request to MathPix API...\n")
@@ -162,7 +193,9 @@ def main() -> None:
             return
 
         # Try OCR only if we have the tools available
-        png = render_region_png(pdf_path, page_number, rect)
+        # Use higher scale for better quality, and add padding for better context
+        # Padding is especially important for isolated equations
+        png = render_region_png(pdf_path, page_number, rect, scale=3.0, padding=15.0)
         res = ocr_mathpix(png)
 
         # Log MathPix result for debugging

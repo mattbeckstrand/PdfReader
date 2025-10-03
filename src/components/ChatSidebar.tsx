@@ -1,9 +1,10 @@
 import 'katex/dist/katex.min.css';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import rehypeKatex from 'rehype-katex';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
+import { IconArrowUp, IconChat, IconClose } from './Icons';
 
 // ===================================================================
 // Types
@@ -26,8 +27,9 @@ interface ChatSidebarProps {
   isLoading: boolean;
   isOpen: boolean;
   onToggle: () => void;
-  extractedText?: string;
-  extractedLatex?: string;
+  hasActiveContext?: boolean; // Whether there's an active selection/extraction
+  activeContextData?: string[]; // The actual context strings to display
+  onClearContext?: () => void; // Callback to clear the active context
 }
 
 // ===================================================================
@@ -42,31 +44,139 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
   isLoading,
   isOpen,
   onToggle,
-  extractedText,
-  extractedLatex,
+  hasActiveContext = false,
+  activeContextData = [],
+  onClearContext,
 }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
-    try {
-      const stored = localStorage.getItem('chatSidebarWidth');
-      const parsed = stored ? parseInt(stored, 10) : 400;
-      if (!Number.isFinite(parsed)) return 400;
-      return Math.min(Math.max(parsed, 280), 800);
-    } catch {
-      return 400;
-    }
-  });
+  const userHasScrolledAwayRef = useRef<boolean>(false);
 
-  const isResizingRef = useRef<boolean>(false);
-  const dragStartXRef = useRef<number>(0);
-  const startWidthRef = useRef<number>(0);
-  const MIN_WIDTH = 280;
-  const MAX_WIDTH = 800;
+  // Minimized state - when true, shows as small pill
+  const [isMinimized, setIsMinimized] = useState(false);
 
-  // Auto-scroll to bottom when new messages arrive
+  // Track which message contexts are expanded
+  const [expandedContexts, setExpandedContexts] = useState<Set<string>>(new Set());
+
+  // Track if the active context (in input box) is expanded
+  const [isActiveContextExpanded, setIsActiveContextExpanded] = useState(false);
+
+  // Track hover state for context badge
+  const [isContextHovered, setIsContextHovered] = useState(false);
+
+  // Resize and position state
+  const [chatSize, setChatSize] = useState({ width: 450, height: 600 });
+  const [chatPosition, setChatPosition] = useState({ bottom: 24, right: 24 });
+  const isResizingRef = useRef(false);
+  const isDraggingRef = useRef(false);
+  const resizeStartRef = useRef({ x: 0, y: 0, width: 0, height: 0 });
+  const dragStartRef = useRef({ x: 0, y: 0, bottom: 0, right: 0 });
+
+  // Handle resize and drag
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const handleMouseMove = (e: MouseEvent) => {
+      if (isResizingRef.current) {
+        const deltaX = resizeStartRef.current.x - e.clientX;
+        const deltaY = resizeStartRef.current.y - e.clientY;
+
+        const newWidth = Math.max(350, Math.min(800, resizeStartRef.current.width + deltaX));
+        const newHeight = Math.max(400, Math.min(900, resizeStartRef.current.height + deltaY));
+
+        setChatSize({ width: newWidth, height: newHeight });
+      } else if (isDraggingRef.current) {
+        const deltaX = dragStartRef.current.x - e.clientX;
+        const deltaY = e.clientY - dragStartRef.current.y;
+
+        const newRight = Math.max(10, dragStartRef.current.right + deltaX);
+        const newBottom = Math.max(10, dragStartRef.current.bottom - deltaY);
+
+        setChatPosition({ right: newRight, bottom: newBottom });
+      }
+    };
+
+    const handleMouseUp = () => {
+      isResizingRef.current = false;
+      isDraggingRef.current = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [chatSize, chatPosition]);
+
+  const handleResizeStart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    isResizingRef.current = true;
+    resizeStartRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      width: chatSize.width,
+      height: chatSize.height,
+    };
+    document.body.style.cursor = 'nwse-resize';
+    document.body.style.userSelect = 'none';
+  };
+
+  const handleDragStart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    isDraggingRef.current = true;
+    dragStartRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      bottom: chatPosition.bottom,
+      right: chatPosition.right,
+    };
+    document.body.style.cursor = 'move';
+    document.body.style.userSelect = 'none';
+  };
+
+  // Detect when user manually scrolls away from bottom
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 10;
+
+      if (isAtBottom) {
+        // User scrolled back to bottom - re-enable auto-scroll
+        userHasScrolledAwayRef.current = false;
+      } else if (!userHasScrolledAwayRef.current) {
+        // Check if this was an intentional scroll up
+        const wasNearBottom =
+          container.scrollHeight - container.scrollTop - container.clientHeight < 50;
+        if (!wasNearBottom) {
+          // User scrolled significantly away - disable auto-scroll
+          userHasScrolledAwayRef.current = true;
+        }
+      }
+    };
+
+    container.addEventListener('scroll', handleScroll);
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // Auto-scroll to bottom only if user hasn't scrolled away
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    // Don't auto-scroll if user has manually scrolled away
+    if (userHasScrolledAwayRef.current) return;
+
+    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 50;
+
+    if (isNearBottom) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [messages]);
 
   // Focus input when sidebar opens
@@ -75,49 +185,6 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
       inputRef.current.focus();
     }
   }, [isOpen]);
-
-  // Cleanup listeners on unmount
-  useEffect(() => {
-    return () => {
-      document.removeEventListener('mousemove', onMouseMove);
-      document.removeEventListener('mouseup', stopResizing);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '' as any;
-    };
-  }, []);
-
-  const onMouseMove = useCallback((e: MouseEvent) => {
-    if (!isResizingRef.current) return;
-    const delta = dragStartXRef.current - e.clientX;
-    let next = startWidthRef.current + delta;
-    next = Math.min(Math.max(next, MIN_WIDTH), MAX_WIDTH);
-    setSidebarWidth(next);
-  }, []);
-
-  const stopResizing = useCallback(() => {
-    if (!isResizingRef.current) return;
-    isResizingRef.current = false;
-    document.removeEventListener('mousemove', onMouseMove);
-    document.removeEventListener('mouseup', stopResizing);
-    document.body.style.cursor = '';
-    document.body.style.userSelect = '' as any;
-    try {
-      localStorage.setItem('chatSidebarWidth', String(sidebarWidth));
-    } catch {}
-  }, [onMouseMove, sidebarWidth]);
-
-  const startResizing = useCallback(
-    (e: React.MouseEvent<HTMLDivElement>) => {
-      isResizingRef.current = true;
-      dragStartXRef.current = e.clientX;
-      startWidthRef.current = sidebarWidth;
-      document.addEventListener('mousemove', onMouseMove);
-      document.addEventListener('mouseup', stopResizing);
-      document.body.style.cursor = 'col-resize';
-      document.body.style.userSelect = 'none' as any;
-    },
-    [onMouseMove, stopResizing, sidebarWidth]
-  );
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -134,313 +201,480 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
     }
   };
 
-  return (
-    <>
-      {/* Toggle Button */}
-      <button
-        onClick={onToggle}
+  // Don't render if not open
+  if (!isOpen) return null;
+
+  // Render minimized pill
+  if (isMinimized) {
+    return (
+      <div
+        onClick={() => setIsMinimized(false)}
         style={{
           position: 'fixed',
-          top: '20px',
-          right: isOpen ? `${sidebarWidth + 20}px` : '20px',
-          zIndex: 1001,
-          width: '40px',
-          height: '40px',
-          borderRadius: '8px',
-          border: '1px solid #333',
-          background: '#1a1a1a',
-          color: '#fff',
+          bottom: '24px',
+          right: '24px',
+          zIndex: 1000,
+          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+          backdropFilter: 'blur(20px)',
+          borderRadius: '50px',
+          padding: '12px 20px',
+          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)',
           cursor: 'pointer',
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'center',
-          fontSize: '18px',
-          transition: 'all 0.3s ease',
-          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3)',
+          gap: '8px',
+          color: '#fff',
+          fontSize: '14px',
+          fontWeight: 500,
+          transition: 'all 0.2s ease',
+          border: '1px solid rgba(255, 255, 255, 0.1)',
         }}
-        title={isOpen ? 'Close chat' : 'Open chat'}
-      >
-        {isOpen ? '✕' : '💬'}
-      </button>
-
-      {/* Sidebar */}
-      <div
-        style={{
-          position: 'fixed',
-          top: 0,
-          right: 0,
-          width: `${sidebarWidth}px`,
-          height: '100vh',
-          background: '#0a0a0a',
-          borderLeft: '1px solid #1a1a1a',
-          display: 'flex',
-          flexDirection: 'column',
-          transform: isOpen ? 'translateX(0)' : 'translateX(100%)',
-          transition: 'transform 0.3s ease',
-          zIndex: 1000,
-          boxShadow: isOpen ? '-4px 0 24px rgba(0, 0, 0, 0.5)' : 'none',
+        onMouseEnter={e => {
+          e.currentTarget.style.transform = 'scale(1.05)';
+          e.currentTarget.style.boxShadow = '0 12px 40px rgba(102, 126, 234, 0.4)';
+        }}
+        onMouseLeave={e => {
+          e.currentTarget.style.transform = 'scale(1)';
+          e.currentTarget.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.4)';
         }}
       >
-        {/* Resizer Handle (left edge) */}
-        <div
-          onMouseDown={startResizing}
-          style={{
-            position: 'absolute',
-            left: 0,
-            top: 0,
-            width: '6px',
-            height: '100%',
-            cursor: 'col-resize',
-            zIndex: 1001,
-            background: 'linear-gradient(to right, rgba(255,255,255,0.06), rgba(255,255,255,0))',
-          }}
-          title="Drag to resize"
-        />
-        {/* Header */}
-        <div
-          style={{
-            padding: '16px 20px',
-            borderBottom: '1px solid #1a1a1a',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px',
-          }}
-        >
-          <span style={{ fontSize: '18px' }}>💬</span>
-          <span style={{ fontSize: '14px', fontWeight: '500', color: '#fff' }}>AI Chat</span>
-          {messages.length > 0 && (
-            <span
-              style={{
-                marginLeft: 'auto',
-                fontSize: '12px',
-                color: '#666',
-              }}
-            >
-              {messages.length} message{messages.length !== 1 ? 's' : ''}
-            </span>
-          )}
-        </div>
-
-        {/* Context Display */}
-        {(extractedText || extractedLatex) && (
-          <div
+        <IconChat size={18} />
+        <span>AI Chat</span>
+        {messages.length > 0 && (
+          <span
             style={{
-              padding: '12px 16px',
-              background: 'rgba(10, 122, 255, 0.05)',
-              borderBottom: '1px solid rgba(10, 122, 255, 0.2)',
+              background: 'rgba(255, 255, 255, 0.2)',
+              borderRadius: '12px',
+              padding: '2px 8px',
               fontSize: '12px',
             }}
           >
-            <div style={{ color: '#0af', marginBottom: '6px', fontWeight: '500' }}>
-              📎 Selected Context
-            </div>
-            {extractedText && (
-              <div
-                style={{
-                  color: '#aaa',
-                  whiteSpace: 'pre-wrap',
-                  maxHeight: '100px',
-                  overflow: 'auto',
-                  lineHeight: '1.4',
-                }}
-              >
-                {extractedText.substring(0, 200)}
-                {extractedText.length > 200 ? '...' : ''}
-              </div>
-            )}
-            {extractedLatex && (
-              <div
-                style={{
-                  marginTop: '8px',
-                  padding: '8px',
-                  background: 'rgba(139, 92, 246, 0.1)',
-                  borderRadius: '4px',
-                  border: '1px solid rgba(139, 92, 246, 0.2)',
-                }}
-              >
-                <div style={{ color: '#a78bfa', fontSize: '11px', marginBottom: '6px' }}>
-                  LaTeX Extracted:
-                </div>
-                <ReactMarkdown
-                  remarkPlugins={[remarkMath]}
-                  rehypePlugins={[rehypeKatex]}
-                  components={{
-                    p: ({ children }: any) => (
-                      <div style={{ color: '#e0d0ff', fontSize: '13px', margin: 0 }}>
-                        {children}
-                      </div>
-                    ),
-                  }}
-                >
-                  {/* Convert MathPix format \( \) and \[ \] to $ and $$ for remark-math */}
-                  {extractedLatex
-                    .replace(/\\\(/g, '$')
-                    .replace(/\\\)/g, '$')
-                    .replace(/\\\[/g, '$$')
-                    .replace(/\\\]/g, '$$')}
-                </ReactMarkdown>
-                {/* Show raw LaTeX for debugging */}
-                <details style={{ marginTop: '6px' }}>
-                  <summary style={{ color: '#666', fontSize: '10px', cursor: 'pointer' }}>
-                    View raw LaTeX
-                  </summary>
-                  <pre
-                    style={{
-                      marginTop: '4px',
-                      padding: '4px',
-                      background: '#000',
-                      color: '#8cf',
-                      fontSize: '10px',
-                      borderRadius: '2px',
-                      overflow: 'auto',
-                      maxHeight: '100px',
-                    }}
-                  >
-                    {extractedLatex}
-                  </pre>
-                </details>
-              </div>
-            )}
-          </div>
+            {messages.length}
+          </span>
         )}
+      </div>
+    );
+  }
+
+  return (
+    <>
+      {/* Floating Popover */}
+      <div
+        style={{
+          position: 'fixed',
+          bottom: `${chatPosition.bottom}px`,
+          right: `${chatPosition.right}px`,
+          width: `${chatSize.width}px`,
+          height: `${chatSize.height}px`,
+          zIndex: 1000,
+          background: '#0a0a0a',
+          backdropFilter: 'blur(20px)',
+          borderRadius: '16px',
+          boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.1)',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+          animation: 'slideUp 0.3s ease',
+        }}
+      >
+        {/* Drag handle - top bar */}
+        <div
+          onMouseDown={handleDragStart}
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            height: '40px',
+            cursor: 'move',
+            zIndex: 9,
+          }}
+          title="Drag to move chat"
+        />
+
+        {/* Resize handle - top-left corner (visible) */}
+        <div
+          onMouseDown={handleResizeStart}
+          style={{
+            position: 'absolute',
+            top: '8px',
+            left: '8px',
+            width: '12px',
+            height: '12px',
+            cursor: 'nwse-resize',
+            zIndex: 12,
+            borderLeft: '2px solid rgba(255, 255, 255, 0.3)',
+            borderTop: '2px solid rgba(255, 255, 255, 0.3)',
+            borderRadius: '2px',
+            opacity: 0.5,
+            transition: 'opacity 0.2s',
+          }}
+          onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
+          onMouseLeave={e => (e.currentTarget.style.opacity = '0.5')}
+          title="Resize chat"
+        />
+        {/* Floating control buttons in top-right corner */}
+        <div
+          style={{
+            position: 'absolute',
+            top: '12px',
+            right: '12px',
+            display: 'flex',
+            gap: '6px',
+            zIndex: 10,
+          }}
+        >
+          {/* Minimize Button */}
+          <button
+            onClick={() => setIsMinimized(true)}
+            style={{
+              background: 'rgba(0, 0, 0, 0.4)',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              color: '#aaa',
+              cursor: 'pointer',
+              padding: '6px',
+              borderRadius: '6px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'all 0.2s ease',
+              width: '28px',
+              height: '28px',
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
+              e.currentTarget.style.color = '#fff';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = 'rgba(0, 0, 0, 0.4)';
+              e.currentTarget.style.color = '#aaa';
+            }}
+            title="Minimize"
+          >
+            <span style={{ fontSize: '16px', lineHeight: 1 }}>−</span>
+          </button>
+          {/* Close Button */}
+          <button
+            onClick={onToggle}
+            style={{
+              background: 'rgba(0, 0, 0, 0.4)',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              color: '#aaa',
+              cursor: 'pointer',
+              padding: '6px',
+              borderRadius: '6px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'all 0.2s ease',
+              width: '28px',
+              height: '28px',
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
+              e.currentTarget.style.color = '#fff';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = 'rgba(0, 0, 0, 0.4)';
+              e.currentTarget.style.color = '#aaa';
+            }}
+            title="Close"
+          >
+            <IconClose size={16} />
+          </button>
+        </div>
 
         {/* Messages */}
         <div
+          ref={messagesContainerRef}
           style={{
             flex: 1,
             overflowY: 'auto',
             padding: '16px',
+            paddingTop: '48px',
             display: 'flex',
             flexDirection: 'column',
-            gap: '16px',
+            gap: '6px',
           }}
         >
           {messages.length === 0 ? (
-            <div
-              style={{
-                flex: 1,
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#555',
-                textAlign: 'center',
-                padding: '40px 20px',
-              }}
-            >
-              <div style={{ fontSize: '48px', marginBottom: '16px' }}>💬</div>
-              <div style={{ fontSize: '14px', marginBottom: '8px', color: '#888' }}>
-                No messages yet
-              </div>
-              <div style={{ fontSize: '12px', color: '#555', lineHeight: '1.6' }}>
-                Select text in the PDF and ask a question to get started
-              </div>
-            </div>
+            <div style={{ flex: 1 }} />
           ) : (
-            messages.map(msg => (
-              <div
-                key={msg.id}
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '8px',
-                }}
-              >
-                {/* Message Header */}
+            messages.map(msg => {
+              const isContextExpanded = expandedContexts.has(msg.id);
+              const toggleContext = () => {
+                setExpandedContexts(prev => {
+                  const next = new Set(prev);
+                  if (next.has(msg.id)) {
+                    next.delete(msg.id);
+                  } else {
+                    next.add(msg.id);
+                  }
+                  return next;
+                });
+              };
+
+              return (
                 <div
+                  key={msg.id}
                   style={{
                     display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    fontSize: '12px',
+                    flexDirection: 'column',
+                    gap: '4px',
+                    alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start',
                   }}
                 >
-                  <span style={{ fontSize: '16px' }}>{msg.role === 'user' ? '👤' : '🤖'}</span>
-                  <span style={{ fontWeight: '500', color: msg.role === 'user' ? '#0af' : '#8c8' }}>
-                    {msg.role === 'user' ? 'You' : 'Assistant'}
-                  </span>
-                  {msg.pageNumber && (
-                    <span style={{ color: '#555', fontSize: '11px' }}>· Page {msg.pageNumber}</span>
-                  )}
-                  <span style={{ marginLeft: 'auto', color: '#555', fontSize: '11px' }}>
-                    {new Date(msg.timestamp).toLocaleTimeString()}
-                  </span>
-                </div>
-
-                {/* Message Content */}
-                <div
-                  style={{
-                    background: msg.role === 'user' ? '#1a1a1a' : '#0f0f0f',
-                    border: `1px solid ${msg.role === 'user' ? '#222' : '#1a1a1a'}`,
-                    borderRadius: '8px',
-                    padding: '12px',
-                    fontSize: '13px',
-                    lineHeight: '1.6',
-                    color: '#eee',
-                  }}
-                >
-                  {msg.role === 'user' ? (
-                    <div style={{ whiteSpace: 'pre-wrap' }}>{msg.content}</div>
-                  ) : (
-                    <ReactMarkdown
-                      remarkPlugins={[remarkGfm, remarkMath]}
-                      rehypePlugins={[rehypeKatex]}
-                      components={{
-                        // Style code blocks
-                        code: ({ node, inline, className, children, ...props }: any) => {
-                          return inline ? (
-                            <code
+                  {/* Message Content */}
+                  <div
+                    style={{
+                      padding: '8px 0',
+                      fontSize: '13px',
+                      lineHeight: '1.5',
+                      color: '#eee',
+                      wordBreak: 'break-word',
+                      overflowWrap: 'break-word',
+                      maxWidth: '85%',
+                    }}
+                  >
+                    {msg.role === 'user' ? (
+                      <div
+                        style={{
+                          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                          border: '1px solid rgba(255, 255, 255, 0.1)',
+                          borderRadius: '16px',
+                          borderBottomRightRadius: '4px',
+                          boxShadow: '0 2px 8px rgba(102, 126, 234, 0.3)',
+                          padding: '12px 14px',
+                          paddingTop: msg.context && msg.context.length > 0 ? '40px' : '12px',
+                          whiteSpace: 'pre-wrap',
+                          position: 'relative',
+                          color: '#fff',
+                        }}
+                      >
+                        {/* Context indicator inside user message bubble */}
+                        {msg.context && msg.context.length > 0 && (
+                          <div
+                            style={{ position: 'absolute', top: '10px', left: '10px', zIndex: 1 }}
+                          >
+                            <button
+                              type="button"
+                              onClick={toggleContext}
                               style={{
-                                background: '#1a1a1a',
                                 padding: '2px 6px',
+                                background: 'rgba(255, 255, 255, 0.08)',
+                                border: '1px solid rgba(255, 255, 255, 0.15)',
                                 borderRadius: '4px',
-                                fontSize: '12px',
-                                fontFamily: 'monospace',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                fontSize: '10px',
+                                color: '#aaa',
+                                cursor: 'pointer',
+                                transition: 'all 0.15s ease',
+                              }}
+                              onMouseEnter={e => {
+                                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.12)';
+                                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+                              }}
+                              onMouseLeave={e => {
+                                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+                                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.15)';
+                              }}
+                            >
+                              <svg
+                                width="10"
+                                height="10"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                              >
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                <polyline points="14 2 14 8 20 8" />
+                              </svg>
+                              <span>Context</span>
+                              <svg
+                                width="8"
+                                height="8"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                style={{
+                                  transform: isContextExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                                  transition: 'transform 0.2s',
+                                }}
+                              >
+                                <polyline points="6 9 12 15 18 9" />
+                              </svg>
+                            </button>
+                            {isContextExpanded && (
+                              <div
+                                style={{
+                                  marginTop: '6px',
+                                  padding: '10px 12px',
+                                  background: 'rgba(0, 0, 0, 0.9)',
+                                  border: '1px solid rgba(255, 255, 255, 0.15)',
+                                  borderRadius: '8px',
+                                  fontSize: '11px',
+                                  maxHeight: '200px',
+                                  maxWidth: '350px',
+                                  overflow: 'auto',
+                                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.5)',
+                                }}
+                              >
+                                {msg.context.map((ctx, idx) => (
+                                  <div
+                                    key={idx}
+                                    style={{
+                                      color: '#aaa',
+                                      lineHeight: '1.4',
+                                      whiteSpace: 'pre-wrap',
+                                      marginBottom: idx < msg.context!.length - 1 ? '8px' : '0',
+                                      paddingBottom: idx < msg.context!.length - 1 ? '8px' : '0',
+                                      borderBottom:
+                                        idx < msg.context!.length - 1
+                                          ? '1px solid rgba(255, 255, 255, 0.05)'
+                                          : 'none',
+                                    }}
+                                  >
+                                    {ctx}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        {msg.content}
+                      </div>
+                    ) : (
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm, remarkMath]}
+                        rehypePlugins={[rehypeKatex]}
+                        components={{
+                          // Style code blocks
+                          code: ({ node, inline, className, children, ...props }: any) => {
+                            return inline ? (
+                              <code
+                                style={{
+                                  background: '#1a1a1a',
+                                  padding: '2px 6px',
+                                  borderRadius: '4px',
+                                  fontSize: '12px',
+                                  fontFamily: 'monospace',
+                                }}
+                                {...props}
+                              >
+                                {children}
+                              </code>
+                            ) : (
+                              <pre
+                                style={{
+                                  background: '#1a1a1a',
+                                  padding: '8px',
+                                  borderRadius: '4px',
+                                  overflow: 'auto',
+                                  fontSize: '11px',
+                                  fontFamily: 'monospace',
+                                  margin: '4px 0',
+                                }}
+                              >
+                                <code {...props}>{children}</code>
+                              </pre>
+                            );
+                          },
+                          // Style links
+                          a: ({ children, ...props }: any) => (
+                            <a style={{ color: '#0af', textDecoration: 'none' }} {...props}>
+                              {children}
+                            </a>
+                          ),
+                          // Style paragraphs
+                          p: ({ children, ...props }: any) => (
+                            <p style={{ margin: '8px 0 8px 0' }} {...props}>
+                              {children}
+                            </p>
+                          ),
+                          // Style headings - compact
+                          h1: ({ children, ...props }: any) => (
+                            <h1
+                              style={{ fontSize: '16px', fontWeight: 600, margin: '12px 0 6px 0' }}
+                              {...props}
+                            >
+                              {children}
+                            </h1>
+                          ),
+                          h2: ({ children, ...props }: any) => (
+                            <h2
+                              style={{ fontSize: '15px', fontWeight: 600, margin: '10px 0 6px 0' }}
+                              {...props}
+                            >
+                              {children}
+                            </h2>
+                          ),
+                          h3: ({ children, ...props }: any) => (
+                            <h3
+                              style={{ fontSize: '14px', fontWeight: 600, margin: '8px 0 4px 0' }}
+                              {...props}
+                            >
+                              {children}
+                            </h3>
+                          ),
+                          // Style lists - minimal indentation
+                          ul: ({ children, ...props }: any) => (
+                            <ul
+                              style={{
+                                marginLeft: '12px',
+                                marginTop: '4px',
+                                marginBottom: '4px',
+                                paddingLeft: '8px',
                               }}
                               {...props}
                             >
                               {children}
-                            </code>
-                          ) : (
-                            <pre
+                            </ul>
+                          ),
+                          ol: ({ children, ...props }: any) => (
+                            <ol
                               style={{
-                                background: '#1a1a1a',
-                                padding: '12px',
-                                borderRadius: '6px',
-                                overflow: 'auto',
-                                fontSize: '12px',
-                                fontFamily: 'monospace',
+                                marginLeft: '12px',
+                                marginTop: '4px',
+                                marginBottom: '4px',
+                                paddingLeft: '8px',
                               }}
+                              {...props}
                             >
-                              <code {...props}>{children}</code>
-                            </pre>
-                          );
-                        },
-                        // Style links
-                        a: ({ children, ...props }: any) => (
-                          <a style={{ color: '#0af', textDecoration: 'none' }} {...props}>
-                            {children}
-                          </a>
-                        ),
-                        // Style lists
-                        ul: ({ children, ...props }: any) => (
-                          <ul style={{ marginLeft: '20px', marginTop: '8px' }} {...props}>
-                            {children}
-                          </ul>
-                        ),
-                        ol: ({ children, ...props }: any) => (
-                          <ol style={{ marginLeft: '20px', marginTop: '8px' }} {...props}>
-                            {children}
-                          </ol>
-                        ),
-                      }}
-                    >
-                      {msg.content}
-                    </ReactMarkdown>
-                  )}
+                              {children}
+                            </ol>
+                          ),
+                          li: ({ children, ...props }: any) => (
+                            <li style={{ marginBottom: '2px' }} {...props}>
+                              {children}
+                            </li>
+                          ),
+                          // Style blockquotes
+                          blockquote: ({ children, ...props }: any) => (
+                            <blockquote
+                              style={{
+                                borderLeft: '2px solid #444',
+                                paddingLeft: '8px',
+                                margin: '4px 0',
+                                color: '#aaa',
+                              }}
+                              {...props}
+                            >
+                              {children}
+                            </blockquote>
+                          ),
+                        }}
+                      >
+                        {msg.content}
+                      </ReactMarkdown>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
 
           {/* Loading Indicator */}
@@ -449,49 +683,184 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: '8px',
+                gap: '4px',
                 color: '#666',
-                fontSize: '13px',
+                fontSize: '8px',
+                padding: '0',
+                marginTop: '-4px',
               }}
             >
-              <span style={{ fontSize: '16px' }}>🤖</span>
-              <span>Thinking...</span>
-              <div
-                style={{
-                  display: 'flex',
-                  gap: '4px',
-                }}
-              >
-                <span className="dot-pulse">●</span>
-                <span className="dot-pulse" style={{ animationDelay: '0.2s' }}>
-                  ●
-                </span>
-                <span className="dot-pulse" style={{ animationDelay: '0.4s' }}>
-                  ●
-                </span>
-              </div>
+              <span className="dot-pulse">●</span>
+              <span className="dot-pulse" style={{ animationDelay: '0.2s' }}>
+                ●
+              </span>
+              <span className="dot-pulse" style={{ animationDelay: '0.4s' }}>
+                ●
+              </span>
             </div>
           )}
 
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Input Area */}
+        {/* Input Area - Always at bottom */}
         <form
           onSubmit={handleSubmit}
           style={{
             padding: '16px',
-            borderTop: '1px solid #1a1a1a',
+            paddingTop: '12px',
             background: '#0a0a0a',
           }}
         >
           <div
             style={{
+              position: 'relative',
               display: 'flex',
-              gap: '8px',
               alignItems: 'flex-end',
+              background: 'linear-gradient(180deg, #0e0e10, #0b0b0d)',
+              border: '1px solid #2a2a2a',
+              borderRadius: '10px',
+              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)',
             }}
           >
+            {/* Context indicator inside input box */}
+            {hasActiveContext && (
+              <div
+                style={{ position: 'absolute', top: '10px', left: '10px', zIndex: 1 }}
+                onMouseEnter={() => setIsContextHovered(true)}
+                onMouseLeave={() => setIsContextHovered(false)}
+              >
+                <button
+                  type="button"
+                  onClick={() => setIsActiveContextExpanded(!isActiveContextExpanded)}
+                  style={{
+                    padding: '2px 6px',
+                    paddingRight: isContextHovered ? '22px' : '6px',
+                    background: 'rgba(255, 255, 255, 0.08)',
+                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                    borderRadius: '4px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    fontSize: '10px',
+                    color: '#aaa',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                    position: 'relative',
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.12)';
+                    e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+                    e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.15)';
+                  }}
+                >
+                  <svg
+                    width="10"
+                    height="10"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                  </svg>
+                  <span>Context</span>
+                  <svg
+                    width="8"
+                    height="8"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    style={{
+                      transform: isActiveContextExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                      transition: 'transform 0.2s',
+                    }}
+                  >
+                    <polyline points="6 9 12 15 18 9" />
+                  </svg>
+                  {/* X button to clear context - appears on hover */}
+                  {isContextHovered && onClearContext && (
+                    <button
+                      type="button"
+                      onClick={e => {
+                        e.stopPropagation();
+                        onClearContext();
+                        setIsActiveContextExpanded(false);
+                      }}
+                      style={{
+                        position: 'absolute',
+                        right: '2px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'rgba(255, 100, 100, 0.2)',
+                        border: 'none',
+                        borderRadius: '3px',
+                        width: '16px',
+                        height: '16px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: 'pointer',
+                        color: '#faa',
+                        fontSize: '10px',
+                        transition: 'all 0.15s ease',
+                      }}
+                      onMouseEnter={e => {
+                        e.currentTarget.style.background = 'rgba(255, 100, 100, 0.4)';
+                        e.currentTarget.style.color = '#fff';
+                      }}
+                      onMouseLeave={e => {
+                        e.currentTarget.style.background = 'rgba(255, 100, 100, 0.2)';
+                        e.currentTarget.style.color = '#faa';
+                      }}
+                      title="Remove context"
+                    >
+                      ×
+                    </button>
+                  )}
+                </button>
+                {isActiveContextExpanded && activeContextData.length > 0 && (
+                  <div
+                    style={{
+                      marginTop: '6px',
+                      padding: '10px 12px',
+                      background: 'rgba(0, 0, 0, 0.9)',
+                      border: '1px solid rgba(255, 255, 255, 0.15)',
+                      borderRadius: '8px',
+                      fontSize: '11px',
+                      maxHeight: '200px',
+                      maxWidth: '350px',
+                      overflow: 'auto',
+                      boxShadow: '0 4px 12px rgba(0, 0, 0, 0.5)',
+                    }}
+                  >
+                    {activeContextData.map((ctx, idx) => (
+                      <div
+                        key={idx}
+                        style={{
+                          color: '#aaa',
+                          lineHeight: '1.4',
+                          whiteSpace: 'pre-wrap',
+                          marginBottom: idx < activeContextData.length - 1 ? '8px' : '0',
+                          paddingBottom: idx < activeContextData.length - 1 ? '8px' : '0',
+                          borderBottom:
+                            idx < activeContextData.length - 1
+                              ? '1px solid rgba(255, 255, 255, 0.05)'
+                              : 'none',
+                        }}
+                      >
+                        {ctx}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             <textarea
               ref={inputRef}
               value={currentQuestion}
@@ -501,15 +870,17 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
               disabled={isLoading}
               style={{
                 flex: 1,
-                background: '#1a1a1a',
-                border: '1px solid #333',
-                borderRadius: '8px',
-                padding: '10px 12px',
+                background: 'transparent',
+                border: 'none',
+                outline: 'none',
+                padding: '12px 14px',
+                paddingTop: hasActiveContext ? '36px' : '12px',
+                paddingRight: '52px',
                 color: '#fff',
                 fontSize: '13px',
                 fontFamily: 'inherit',
                 resize: 'none',
-                minHeight: '44px',
+                minHeight: '48px',
                 maxHeight: '120px',
                 lineHeight: '1.4',
               }}
@@ -519,30 +890,29 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
               type="submit"
               disabled={isLoading || !currentQuestion.trim()}
               style={{
-                background: currentQuestion.trim() && !isLoading ? '#0a7aff' : '#333',
-                color: '#fff',
+                position: 'absolute',
+                right: '8px',
+                bottom: '8px',
+                background: currentQuestion.trim() && !isLoading ? '#fff' : '#2a2a2a',
+                color: currentQuestion.trim() && !isLoading ? '#000' : '#666',
                 border: 'none',
-                borderRadius: '8px',
-                padding: '10px 16px',
+                borderRadius: '50%',
+                padding: 0,
                 cursor: currentQuestion.trim() && !isLoading ? 'pointer' : 'not-allowed',
-                fontSize: '13px',
-                fontWeight: '500',
-                transition: 'all 0.2s',
-                height: '44px',
+                transition: 'all 0.15s ease',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '26px',
+                height: '26px',
+                boxShadow:
+                  currentQuestion.trim() && !isLoading ? '0 2px 8px rgba(255,255,255,0.2)' : 'none',
               }}
+              title={isLoading ? 'Sending...' : 'Send message'}
+              aria-label="Send message"
             >
-              {isLoading ? '...' : '→'}
+              {isLoading ? '...' : <IconArrowUp size={14} />}
             </button>
-          </div>
-          <div
-            style={{
-              marginTop: '8px',
-              fontSize: '11px',
-              color: '#555',
-              textAlign: 'center',
-            }}
-          >
-            Press Enter to send · Shift+Enter for new line
           </div>
         </form>
       </div>
@@ -556,6 +926,16 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
           }
           .dot-pulse {
             animation: dot-pulse 1.4s infinite;
+          }
+          @keyframes slideUp {
+            from {
+              opacity: 0;
+              transform: translateY(20px) scale(0.95);
+            }
+            to {
+              opacity: 1;
+              transform: translateY(0) scale(1);
+            }
           }
         `}
       </style>
