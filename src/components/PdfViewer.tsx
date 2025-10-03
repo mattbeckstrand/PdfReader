@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 // ✅ CORRECT: Import from legacy build for Electron compatibility
 import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist/legacy/build/pdf';
 
-import { Minus, Moon, PanelLeftClose, PanelLeftOpen, Plus, RotateCcw, Sun } from 'lucide-react';
+import { Moon, PanelLeftClose, PanelLeftOpen, Sun } from 'lucide-react';
 import type { RegionSelection } from '../types';
 import { PageThumbnailSidebar } from './PageThumbnailSidebar';
 import PdfPage from './PdfPage';
@@ -598,107 +598,6 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
                 / {totalPages}
               </span>
             </form>
-
-            {/* Zoom Controls */}
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                marginLeft: '20px',
-              }}
-            >
-              <button
-                onClick={handleZoomOut}
-                className="btn"
-                style={{
-                  padding: '6px 10px',
-                  fontSize: '13px',
-                  cursor: 'pointer',
-                  border: '1px solid var(--stroke-1)',
-                  borderRadius: 'var(--radius-md)',
-                  backgroundColor: 'transparent',
-                  color: 'var(--text-1)',
-                  transition: 'all 0.15s ease',
-                  display: 'flex',
-                  alignItems: 'center',
-                }}
-                onMouseEnter={e => {
-                  e.currentTarget.style.backgroundColor = 'var(--surface-3)';
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.backgroundColor = 'transparent';
-                }}
-                title="Zoom out"
-              >
-                <Minus size={14} />
-              </button>
-
-              <span
-                style={{
-                  fontSize: '13px',
-                  color: 'var(--text-muted)',
-                  fontWeight: '400',
-                  minWidth: '50px',
-                  textAlign: 'center',
-                  letterSpacing: '0.3px',
-                }}
-              >
-                {Math.round(zoom * 100)}%
-              </span>
-
-              <button
-                onClick={handleZoomIn}
-                className="btn"
-                style={{
-                  padding: '6px 10px',
-                  fontSize: '13px',
-                  cursor: 'pointer',
-                  border: '1px solid var(--stroke-1)',
-                  borderRadius: 'var(--radius-md)',
-                  backgroundColor: 'transparent',
-                  color: 'var(--text-1)',
-                  transition: 'all 0.15s ease',
-                  display: 'flex',
-                  alignItems: 'center',
-                }}
-                onMouseEnter={e => {
-                  e.currentTarget.style.backgroundColor = 'var(--surface-3)';
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.backgroundColor = 'transparent';
-                }}
-                title="Zoom in"
-              >
-                <Plus size={14} />
-              </button>
-
-              <button
-                onClick={handleResetZoom}
-                className="btn"
-                style={{
-                  padding: '6px 10px',
-                  fontSize: '13px',
-                  cursor: 'pointer',
-                  border: '1px solid var(--stroke-1)',
-                  borderRadius: 'var(--radius-md)',
-                  backgroundColor: 'transparent',
-                  color: 'var(--text-1)',
-                  transition: 'all 0.15s ease',
-                  display: 'flex',
-                  alignItems: 'center',
-                }}
-                onMouseEnter={e => {
-                  e.currentTarget.style.backgroundColor = 'var(--surface-3)';
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.backgroundColor = 'transparent';
-                }}
-                title="Reset zoom"
-              >
-                <RotateCcw size={14} />
-              </button>
-            </div>
           </>
         )}
 
