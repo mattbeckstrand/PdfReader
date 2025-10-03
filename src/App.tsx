@@ -165,12 +165,23 @@ const App: React.FC = () => {
         }
 
         console.log('✅ [EXTRACTION] Using PDF path:', pdfPath);
+        console.log('✅ [EXTRACTION] Selection bbox:', {
+          x: selection.pdf.x,
+          y: selection.pdf.y,
+          width: selection.pdf.width,
+          height: selection.pdf.height,
+          pageNumber: selection.pageNumber,
+        });
         const res = await window.electronAPI.extract.region(pdfPath, selection.pageNumber, {
           x: selection.pdf.x,
           y: selection.pdf.y,
           width: selection.pdf.width,
           height: selection.pdf.height,
         });
+        console.log('✅ [EXTRACTION] Full response:', res);
+        console.log('✅ [EXTRACTION] LaTeX received:', res.latex);
+        console.log('✅ [EXTRACTION] Text received:', res.text);
+        console.log('✅ [EXTRACTION] Source:', res.source);
         if (res.success) {
           setExtractResult({
             loading: false,
