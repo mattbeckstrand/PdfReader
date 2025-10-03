@@ -41,10 +41,31 @@ export interface ElectronAPI {
     read: (filePath: string) => Promise<FileReadResult>;
   };
 
+  // Dialog operations
+  dialog: {
+    openFile: () => Promise<FileReadResult>;
+  };
+
   // System
   system: {
     platform: NodeJS.Platform;
     openExternal: (url: string) => Promise<void>;
+  };
+
+  // Extraction
+  extract: {
+    region: (
+      pdfPath: string,
+      pageNumber: number,
+      bbox: { x: number; y: number; width: number; height: number },
+      pythonPath?: string
+    ) => Promise<{
+      success: boolean;
+      text?: string;
+      latex?: string;
+      source?: string;
+      error?: string;
+    }>;
   };
 }
 

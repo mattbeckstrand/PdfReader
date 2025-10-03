@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 // ✅ CORRECT: Import from legacy build for Electron compatibility
 import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist/legacy/build/pdf';
 
+import type { RegionSelection } from '../types';
 import PdfPage from './PdfPage';
 
 // ===================================================================
@@ -18,6 +19,8 @@ interface PdfViewerProps {
   error: string | null;
   onLoadPdf: (file: File, filePathToStore?: string) => Promise<void>;
   onSetCurrentPage: (pageNum: number) => void;
+  onCanvasReady?: (pageNum: number, canvas: HTMLCanvasElement | null, scaleFactor?: number) => void;
+  onRegionSelected?: (selection: RegionSelection) => void;
 }
 
 // ===================================================================
@@ -45,13 +48,14 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
   error,
   onLoadPdf,
   onSetCurrentPage,
+  onCanvasReady,
+  onRegionSelected,
 }) => {
   const MAX_PAGE_WIDTH = 900; // Keep in sync with wrapper style below
   // ===================================================================
   // Refs
   // ===================================================================
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const pageRefsMap = useRef<Map<number, HTMLDivElement>>(new Map());
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -95,24 +99,45 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
   // ===================================================================
 
   /**
-   * Handle file selection from file picker
+   * Handle opening file via Electron dialog
    */
-  const handleFileSelect = useCallback(
-    async (event: React.ChangeEvent<HTMLInputElement>) => {
-      const file = event.target.files?.[0];
-      if (file && file.type === 'application/pdf') {
-        // In Electron, File objects have a 'path' property with the full file path
-        const filePath = (file as any).path;
-        console.log('📁 Selected file:', { name: file.name, path: filePath });
-        await onLoadPdf(file, filePath);
-      } else {
-        alert('Please select a valid PDF file');
+  const handleOpenFile = useCallback(async () => {
+    console.log('📁 [FILE SELECT] Opening Electron file dialog...');
+
+    try {
+      const result = await window.electronAPI.dialog.openFile();
+
+      if (!result.success) {
+        if (!(result as any).canceled) {
+          console.error('❌ [FILE SELECT] Failed to open file:', result.error);
+          alert(`Failed to open file: ${result.error}`);
+        }
+        return;
       }
-      // Reset input to allow re-selecting same file
-      event.target.value = '';
-    },
-    [onLoadPdf]
-  );
+
+      if (!result.data || !result.name || !result.path) {
+        console.error('❌ [FILE SELECT] Invalid result from dialog');
+        return;
+      }
+
+      console.log('📁 [FILE SELECT] Selected file:', {
+        name: result.name,
+        path: result.path,
+        size: result.data.length,
+      });
+
+      // Convert Uint8Array to File object
+      const blob = new Blob([result.data], { type: 'application/pdf' });
+      const file = new File([blob], result.name, { type: 'application/pdf' });
+
+      console.log('📁 [FILE SELECT] Calling onLoadPdf with path:', result.path);
+      await onLoadPdf(file, result.path);
+      console.log('📁 [FILE SELECT] onLoadPdf completed');
+    } catch (error) {
+      console.error('❌ [FILE SELECT] Error opening file:', error);
+      alert('Failed to open file');
+    }
+  }, [onLoadPdf]);
 
   /**
    * Handle page number input change
@@ -324,7 +349,7 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
       >
         {/* File Picker Button */}
         <button
-          onClick={() => fileInputRef.current?.click()}
+          onClick={handleOpenFile}
           style={{
             padding: '8px 16px',
             fontSize: '13px',
@@ -350,15 +375,6 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
         >
           Open
         </button>
-
-        {/* Hidden File Input */}
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".pdf"
-          onChange={handleFileSelect}
-          style={{ display: 'none' }}
-        />
 
         {/* Navigation Controls (only visible when PDF is loaded) */}
         {pdfDocument && (
@@ -550,7 +566,7 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
 
               {/* CTA Button */}
               <button
-                onClick={() => fileInputRef.current?.click()}
+                onClick={handleOpenFile}
                 style={{
                   padding: '14px 32px',
                   fontSize: '14px',
@@ -610,6 +626,8 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
                 containerWidth={containerWidth}
                 onPageRef={handlePageRef}
                 onVisibilityChange={handlePageVisibilityChange}
+                onCanvasReady={onCanvasReady}
+                onRegionSelected={onRegionSelected}
               />
             ))}
           </div>
@@ -635,6 +653,52 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
         .textLayer ::-moz-selection {
           background: rgba(0, 0, 0, 0.15);
           color: transparent;
+        }
+
+        /* Math mode selection - purple highlight for mathematical content */
+        .textLayer.math-mode ::selection {
+          background: rgba(139, 92, 246, 0.2);
+          color: transparent;
+        }
+
+        .textLayer.math-mode ::-moz-selection {
+          background: rgba(139, 92, 246, 0.2);
+          color: transparent;
+        }
+
+        /* Math content indicator - subtle glow for detected math spans */
+        .textLayer span.math-detected {
+          box-shadow: 0 0 2px rgba(139, 92, 246, 0.4);
+          border-radius: 2px;
+        }
+
+        /* Math region highlight - for auto-expanded selections */
+        .textLayer .math-region-highlight {
+          background: linear-gradient(90deg,
+            rgba(139, 92, 246, 0.1) 0%,
+            rgba(139, 92, 246, 0.05) 50%,
+            rgba(139, 92, 246, 0.1) 100%);
+          border: 1px solid rgba(139, 92, 246, 0.3);
+          border-radius: 4px;
+          position: absolute;
+          pointer-events: none;
+          animation: mathHighlightPulse 1.5s ease-in-out;
+        }
+
+        /* Subtle animation for math detection */
+        @keyframes mathHighlightPulse {
+          0% {
+            background: rgba(139, 92, 246, 0.2);
+            transform: scale(1.02);
+          }
+          50% {
+            background: rgba(139, 92, 246, 0.1);
+            transform: scale(1);
+          }
+          100% {
+            background: rgba(139, 92, 246, 0.05);
+            transform: scale(1);
+          }
         }
 
         /* Text layer must be positioned exactly */

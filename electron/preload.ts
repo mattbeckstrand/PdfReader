@@ -37,10 +37,31 @@ interface ElectronAPI {
     read: (filePath: string) => Promise<FileReadResult>;
   };
 
+  // Dialog operations
+  dialog: {
+    openFile: () => Promise<FileReadResult>;
+  };
+
   // System
   system: {
     platform: NodeJS.Platform;
     openExternal: (url: string) => Promise<void>;
+  };
+
+  // Extraction
+  extract: {
+    region: (
+      pdfPath: string,
+      pageNumber: number,
+      bbox: { x: number; y: number; width: number; height: number },
+      pythonPath?: string
+    ) => Promise<{
+      success: boolean;
+      text?: string;
+      latex?: string;
+      source?: string;
+      error?: string;
+    }>;
   };
 }
 
@@ -126,9 +147,18 @@ const electronAPI: ElectronAPI = {
       ipcRenderer.invoke('file:read', filePath) as Promise<FileReadResult>,
   },
 
+  dialog: {
+    openFile: () => ipcRenderer.invoke('dialog:openFile') as Promise<FileReadResult>,
+  },
+
   system: {
     platform: process.platform,
     openExternal: (url: string) => ipcRenderer.invoke('system:open-external', url),
+  },
+
+  extract: {
+    region: (pdfPath, pageNumber, bbox, pythonPath) =>
+      ipcRenderer.invoke('extract:region', { pdfPath, pageNumber, bbox, pythonPath }),
   },
 };
 

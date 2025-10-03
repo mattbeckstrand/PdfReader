@@ -9,6 +9,6 @@
     "allowImportingTsExtensions": false,
     "skipLibCheck": true
   },
-  "include": ["electron/**/*"],
-  "exclude": ["node_modules", "dist", "src"]
+  "include": ["electron/main.ts"],
+  "exclude": ["node_modules", "dist", "src", "electron/preload.ts"]
 }

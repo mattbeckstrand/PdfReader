@@ -6,17 +6,24 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "electron:compile": "tsc -p tsconfig.electron.json",
+    "electron:compile:main": "tsc -p tsconfig.electron.json",
+    "electron:compile:preload": "tsc -p tsconfig.preload.json",
+    "electron:compile": "npm run electron:compile:main && npm run electron:compile:preload",
     "electron:dev": "npm run electron:compile && VITE_DEV_SERVER_URL=http://localhost:5173 electron ./dist-electron/main.js",
     "electron:build": "electron-builder"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
+    "dotenv": "^17.2.3",
+    "katex": "^0.16.22",
     "lucide-react": "^0.544.0",
     "pdfjs-dist": "^3.11.174",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-markdown": "^10.1.0"
+    "react-markdown": "^10.1.0",
+    "rehype-katex": "^7.0.1",
+    "remark-gfm": "^4.0.1",
+    "remark-math": "^6.0.0"
   },
   "devDependencies": {
     "@types/react": "^18.2.0",
