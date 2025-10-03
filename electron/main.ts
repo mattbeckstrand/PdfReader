@@ -213,16 +213,37 @@ ipcMain.handle(
 // AI: Ask (Gemini)
 // ============================================================================
 
+interface ConversationMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  pageNumber?: number;
+}
+
 ipcMain.handle(
   'ai:ask',
-  async (_event, args: { question: string; context: string[]; pageNumber?: number }) => {
+  async (
+    event,
+    args: {
+      question: string;
+      context: string[];
+      pageNumber?: number;
+      imageBase64?: string;
+      conversationHistory?: ConversationMessage[];
+    }
+  ) => {
     console.log('🤖 [AI] Received ask request:', {
       question: args?.question?.substring(0, 50) + '...',
       contextLength: args?.context?.length || 0,
       pageNumber: args?.pageNumber,
+      hasImage: !!args?.imageBase64,
+      imageSize: args?.imageBase64 ? `${Math.round(args.imageBase64.length / 1024)}KB` : 'N/A',
+      historyLength: args?.conversationHistory?.length || 0,
     });
 
-    const { question, context, pageNumber } = args || { question: '', context: [] };
+    const { question, context, pageNumber, imageBase64, conversationHistory } = args || {
+      question: '',
+      context: [],
+    };
 
     const apiKey = process.env['VITE_GEMINI_API_KEY'] || process.env['GEMINI_API_KEY'];
     // Use Flash model (higher free tier limits, faster) - fallback to 1.5 Flash if 2.0 not available
@@ -231,19 +252,17 @@ ipcMain.handle(
     console.log('🔑 [AI] API Key available:', !!apiKey);
     console.log('🤖 [AI] Model:', modelName);
 
-    const makeAnswer = (answer: string): any => ({
-      id: `${Date.now()}`,
-      questionId: 'inline',
-      answer,
-      pageNumber,
-      model: modelName,
-      timestamp: Date.now(),
-      tokensUsed: 0,
-    });
+    const requestId = `${Date.now()}`;
 
     if (!apiKey) {
       console.error('❌ [AI] No API key found!');
-      return makeAnswer('AI not configured: missing GEMINI_API_KEY.');
+      event.sender.send('ai:stream-chunk', {
+        requestId,
+        chunk: 'AI not configured: missing GEMINI_API_KEY.',
+        done: true,
+        pageNumber,
+      });
+      return { requestId };
     }
 
     try {
@@ -252,33 +271,131 @@ ipcMain.handle(
       const model = genAI.getGenerativeModel({ model: modelName });
 
       const mergedContext = (context || []).filter(Boolean).join('\n\n---\n\n');
-      const prompt = [
-        'You are helping a student understand math from a PDF textbook.',
-        'Given the focused selection and nearby context, answer clearly and thoroughly.',
-        '',
-        'Context:',
-        '---',
-        mergedContext || '(no additional context)',
-        '---',
-        '',
-        `Question: ${question}`,
-        '',
-        'Guidelines:',
-        '- Explain intuition first, then formal details.',
-        '- If math is present, include LaTeX for formulas.',
-        '- Reference definitions if relevant.',
-        '- Keep the answer concise but complete.',
-      ].join('\n');
 
-      console.log('🤖 [AI] Sending to Gemini...');
-      const result = await model.generateContent(prompt);
-      const text = result?.response?.text?.() || '';
-      console.log('✅ [AI] Response received:', text.substring(0, 100) + '...');
-      return makeAnswer(text || '');
+      // Format conversation history
+      const formatHistory = (history?: ConversationMessage[]): string => {
+        if (!history || history.length === 0) return '';
+
+        const formatted = history
+          .map(msg => {
+            const pagePart = msg.pageNumber ? ` (Page ${msg.pageNumber})` : '';
+            const role = msg.role === 'user' ? 'Student' : 'Assistant';
+            // Truncate old responses to 150 chars to save tokens
+            const content =
+              msg.role === 'assistant' && msg.content.length > 150
+                ? msg.content.substring(0, 150) + '...'
+                : msg.content;
+            return `${role}${pagePart}: ${content}`;
+          })
+          .join('\n\n');
+
+        return '\n\n💬 PREVIOUS CONVERSATION:\n---\n' + formatted + '\n---\n';
+      };
+
+      const historySection = formatHistory(conversationHistory);
+
+      // Build multimodal content array
+      const contentParts: any[] = [];
+
+      // Add image first if available (helps AI see visual context)
+      if (imageBase64) {
+        contentParts.push({
+          inlineData: {
+            mimeType: 'image/png',
+            data: imageBase64,
+          },
+        });
+        console.log('📸 [AI] Including screenshot in request');
+      }
+
+      // Build vision-aware prompt
+      const prompt = imageBase64
+        ? [
+            'You are helping a student understand content from a PDF textbook.',
+            historySection,
+            '',
+            '📸 IMAGE: See the screenshot above showing the selected content from the PDF.',
+            '',
+            '📝 EXTRACTED TEXT (may be incomplete for equations/diagrams):',
+            '---',
+            mergedContext || '(no text extracted)',
+            '---',
+            '',
+            `❓ CURRENT STUDENT QUESTION: ${question}`,
+            '',
+            '📋 INSTRUCTIONS:',
+            '- Consider the previous conversation context when answering',
+            '- ALWAYS analyze the IMAGE first - what do you see visually?',
+            '- Use the extracted text as supplementary context',
+            '- For equations: describe what you see in the image AND reference any LaTeX',
+            '- For diagrams/graphs: describe the visual elements thoroughly',
+            '- For mixed content: explain how visual and textual elements relate',
+            '- Explain intuition first, then formal details',
+            '- Use LaTeX formatting for mathematical expressions in your answer',
+            '- Keep answers clear, thorough, and student-friendly',
+          ].join('\n')
+        : [
+            'You are helping a student understand content from a PDF textbook.',
+            'Given the focused selection and nearby context, answer clearly and thoroughly.',
+            historySection,
+            '',
+            'Context from PDF:',
+            '---',
+            mergedContext || '(no additional context)',
+            '---',
+            '',
+            `Current Question: ${question}`,
+            '',
+            'Guidelines:',
+            '- Consider the previous conversation when answering',
+            '- Explain intuition first, then formal details.',
+            '- If math is present, include LaTeX for formulas.',
+            '- Reference definitions if relevant.',
+            '- Keep the answer concise but complete.',
+          ].join('\n');
+
+      contentParts.push({ text: prompt });
+
+      console.log('🤖 [AI] Streaming from Gemini...', imageBase64 ? '(with image)' : '(text only)');
+
+      // Use streaming API
+      const result = await model.generateContentStream(contentParts);
+
+      let fullText = '';
+      for await (const chunk of result.stream) {
+        const chunkText = chunk.text();
+        fullText += chunkText;
+
+        // Send each chunk to renderer
+        event.sender.send('ai:stream-chunk', {
+          requestId,
+          chunk: chunkText,
+          done: false,
+          pageNumber,
+        });
+      }
+
+      console.log('✅ [AI] Streaming complete:', fullText.substring(0, 100) + '...');
+
+      // Send final "done" message
+      event.sender.send('ai:stream-chunk', {
+        requestId,
+        chunk: '',
+        done: true,
+        pageNumber,
+      });
+
+      return { requestId };
     } catch (error: any) {
       console.error('❌ [AI] Error:', error);
       const msg = error?.message || 'Failed to get AI response';
-      return makeAnswer(`Error: ${msg}`);
+      event.sender.send('ai:stream-chunk', {
+        requestId,
+        chunk: `Error: ${msg}`,
+        done: true,
+        pageNumber,
+      });
+      return { requestId };
     }
   }
 );

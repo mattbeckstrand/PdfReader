@@ -206,6 +206,68 @@ export function hasValidText(text: string): boolean {
 }
 
 // ============================================================================
+// Canvas & Screenshot Utilities
+// ============================================================================
+
+/**
+ * Captures a region of a canvas as a base64 PNG string
+ * Used for sending visual context to multimodal AI
+ */
+export function captureCanvasRegion(
+  canvas: HTMLCanvasElement,
+  bbox: { x: number; y: number; width: number; height: number },
+  scaleFactor: number = 1
+): string | null {
+  try {
+    // Create a temporary canvas for the cropped region
+    const tempCanvas = document.createElement('canvas');
+    const tempCtx = tempCanvas.getContext('2d');
+
+    if (!tempCtx) {
+      console.warn('Failed to get 2D context for temp canvas');
+      return null;
+    }
+
+    // Convert CSS coordinates to canvas coordinates
+    const x = Math.max(0, Math.floor(bbox.x * scaleFactor));
+    const y = Math.max(0, Math.floor(bbox.y * scaleFactor));
+    const width = Math.min(canvas.width - x, Math.floor(bbox.width * scaleFactor));
+    const height = Math.min(canvas.height - y, Math.floor(bbox.height * scaleFactor));
+
+    if (width <= 0 || height <= 0) {
+      console.warn('Invalid region dimensions:', { width, height });
+      return null;
+    }
+
+    // Set temp canvas size to match the region
+    tempCanvas.width = width;
+    tempCanvas.height = height;
+
+    // Draw the cropped region
+    tempCtx.drawImage(
+      canvas,
+      x,
+      y,
+      width,
+      height, // Source rectangle
+      0,
+      0,
+      width,
+      height // Destination rectangle
+    );
+
+    // Convert to base64 PNG (without data URL prefix for efficient transmission)
+    const dataUrl = tempCanvas.toDataURL('image/png');
+    const base64 = dataUrl.split(',')[1]; // Remove "data:image/png;base64," prefix
+
+    return base64;
+  } catch (error) {
+    console.error('Failed to capture canvas region:', error);
+    return null;
+  }
+}
+
+// ============================================================================
 // Local Storage Helpers
 // ============================================================================
 
