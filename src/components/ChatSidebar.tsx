@@ -267,10 +267,11 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
           width: `${chatSize.width}px`,
           height: `${chatSize.height}px`,
           zIndex: 1000,
-          background: '#0a0a0a',
+          background: 'var(--surface-1)',
           backdropFilter: 'blur(20px)',
           borderRadius: '16px',
-          boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.1)',
+          boxShadow: 'var(--shadow-2)',
+          border: '1px solid var(--stroke-1)',
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
@@ -709,7 +710,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
           style={{
             padding: '16px',
             paddingTop: '12px',
-            background: '#0a0a0a',
+            background: 'var(--surface-1)',
           }}
         >
           <div
@@ -717,10 +718,10 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
               position: 'relative',
               display: 'flex',
               alignItems: 'flex-end',
-              background: 'linear-gradient(180deg, #0e0e10, #0b0b0d)',
-              border: '1px solid #2a2a2a',
-              borderRadius: '10px',
-              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)',
+              background: 'var(--surface-2)',
+              border: '1px solid var(--stroke-1)',
+              borderRadius: 'var(--radius-md)',
+              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.02)',
             }}
           >
             {/* Context indicator inside input box */}

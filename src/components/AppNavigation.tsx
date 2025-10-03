@@ -56,7 +56,7 @@ export const AppNavigation: React.FC<AppNavigationProps> = ({
           padding: '11px 18px',
           border: 'none',
           borderRadius: '10px',
-          background: currentView === 'library' ? 'rgba(255,255,255,0.08)' : 'transparent',
+          background: currentView === 'library' ? 'var(--nav-active-bg)' : 'transparent',
           color: currentView === 'library' ? 'var(--text-1)' : 'var(--text-2)',
           cursor: 'pointer',
           fontSize: '13px',
@@ -66,7 +66,7 @@ export const AppNavigation: React.FC<AppNavigationProps> = ({
         }}
         onMouseEnter={e => {
           if (currentView !== 'library') {
-            e.currentTarget.style.background = 'rgba(255,255,255,0.06)';
+            e.currentTarget.style.background = 'var(--nav-hover-bg)';
             e.currentTarget.style.color = 'var(--text-1)';
           }
         }}
@@ -93,13 +93,13 @@ export const AppNavigation: React.FC<AppNavigationProps> = ({
           padding: '11px 18px',
           border: 'none',
           borderRadius: '10px',
-          background: currentView === 'reader' ? 'rgba(255,255,255,0.08)' : 'transparent',
+          background: currentView === 'reader' ? 'var(--nav-active-bg)' : 'transparent',
           color:
             currentView === 'reader'
               ? 'var(--text-1)'
               : hasOpenDocument
               ? 'var(--text-2)'
-              : 'rgba(255,255,255,0.25)',
+              : 'var(--nav-disabled-text)',
           cursor: hasOpenDocument ? 'pointer' : 'not-allowed',
           fontSize: '13px',
           fontWeight: '500',
@@ -109,7 +109,7 @@ export const AppNavigation: React.FC<AppNavigationProps> = ({
         }}
         onMouseEnter={e => {
           if (currentView !== 'reader' && hasOpenDocument) {
-            e.currentTarget.style.background = 'rgba(255,255,255,0.06)';
+            e.currentTarget.style.background = 'var(--nav-hover-bg)';
             e.currentTarget.style.color = 'var(--text-1)';
           }
         }}
