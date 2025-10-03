@@ -33,16 +33,18 @@ export const AppNavigation: React.FC<AppNavigationProps> = ({
     <div
       style={{
         position: 'fixed',
-        top: '24px',
-        left: '40px',
+        left: 0,
+        top: 0,
+        bottom: 0,
+        width: '80px',
         zIndex: 1001,
         display: 'flex',
-        gap: '6px',
+        flexDirection: 'column',
+        gap: '12px',
         background: 'var(--surface-2)',
         backdropFilter: 'blur(20px)',
-        padding: '6px',
-        borderRadius: '14px',
-        border: '1px solid var(--stroke-1)',
+        padding: '20px 12px',
+        borderRight: '1px solid var(--stroke-1)',
         boxShadow: 'var(--shadow-1)',
       }}
     >
@@ -51,15 +53,17 @@ export const AppNavigation: React.FC<AppNavigationProps> = ({
         onClick={() => onViewChange('library')}
         style={{
           display: 'flex',
+          flexDirection: 'column',
           alignItems: 'center',
+          justifyContent: 'center',
           gap: '8px',
-          padding: '11px 18px',
+          padding: '16px 12px',
           border: 'none',
-          borderRadius: '10px',
+          borderRadius: '12px',
           background: currentView === 'library' ? 'var(--nav-active-bg)' : 'transparent',
           color: currentView === 'library' ? 'var(--text-1)' : 'var(--text-2)',
           cursor: 'pointer',
-          fontSize: '13px',
+          fontSize: '11px',
           fontWeight: '500',
           transition: 'all var(--transition)',
           letterSpacing: '-0.01em',
@@ -78,7 +82,7 @@ export const AppNavigation: React.FC<AppNavigationProps> = ({
         }}
         title="Library"
       >
-        <Library size={17} strokeWidth={2} />
+        <Library size={24} strokeWidth={2} />
         <span>Library</span>
       </button>
 
@@ -88,11 +92,13 @@ export const AppNavigation: React.FC<AppNavigationProps> = ({
         disabled={!hasOpenDocument}
         style={{
           display: 'flex',
+          flexDirection: 'column',
           alignItems: 'center',
+          justifyContent: 'center',
           gap: '8px',
-          padding: '11px 18px',
+          padding: '16px 12px',
           border: 'none',
-          borderRadius: '10px',
+          borderRadius: '12px',
           background: currentView === 'reader' ? 'var(--nav-active-bg)' : 'transparent',
           color:
             currentView === 'reader'
@@ -101,7 +107,7 @@ export const AppNavigation: React.FC<AppNavigationProps> = ({
               ? 'var(--text-2)'
               : 'var(--nav-disabled-text)',
           cursor: hasOpenDocument ? 'pointer' : 'not-allowed',
-          fontSize: '13px',
+          fontSize: '11px',
           fontWeight: '500',
           transition: 'all var(--transition)',
           opacity: hasOpenDocument ? 1 : 0.5,
@@ -121,7 +127,7 @@ export const AppNavigation: React.FC<AppNavigationProps> = ({
         }}
         title={hasOpenDocument ? 'Reader' : 'Open a document to read'}
       >
-        <BookOpen size={17} strokeWidth={2} />
+        <BookOpen size={24} strokeWidth={2} />
         <span>Reader</span>
       </button>
     </div>

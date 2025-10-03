@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AppNavigation, AppView } from './components/AppNavigation';
+import type { AppView } from './components/AppNavigation';
 import { ChatMessage, ChatSidebar } from './components/ChatSidebar';
+import { DocumentMenu } from './components/DocumentMenu';
+import { IconHome } from './components/Icons';
 import { LibraryView } from './components/LibraryView';
 import PdfViewer from './components/PdfViewer';
 import { useContextualChunks } from './features/contextual-chunking/useContextualChunks';
@@ -553,57 +555,114 @@ const App: React.FC = () => {
   // Render
   // ===================================================================
 
+  /**
+   * Handle opening document from menu
+   */
+  const handleOpenDocumentFromMenu = useCallback(
+    async (doc: LibraryDocument) => {
+      // If already viewing this document, do nothing
+      if (currentDocumentId === doc.id && currentView === 'reader') {
+        return;
+      }
+
+      await handleOpenDocumentFromLibrary(doc);
+    },
+    [currentDocumentId, currentView, handleOpenDocumentFromLibrary]
+  );
+
+  /**
+   * Handle "Open File" from menu
+   */
+  const handleOpenFileFromMenu = useCallback(async () => {
+    await handleAddDocumentFromLibrary();
+  }, [handleAddDocumentFromLibrary]);
+
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
-      {/* Navigation */}
-      <AppNavigation
-        currentView={currentView}
-        onViewChange={setCurrentView}
-        hasOpenDocument={pdfDocument !== null}
-      />
-
-      {/* Library View */}
-      {currentView === 'library' && (
-        <LibraryView
-          documents={documents}
-          onOpenDocument={handleOpenDocumentFromLibrary}
-          onAddDocument={handleAddDocumentFromLibrary}
-          theme={theme}
-          onThemeToggle={toggleTheme}
-        />
-      )}
-
-      {/* Reader View */}
-      {currentView === 'reader' && (
-        <>
-          <PdfViewer
-            pdfDocument={pdfDocument}
-            allPageObjects={allPageObjects}
-            currentPage={currentPage}
-            totalPages={totalPages}
-            loading={loading}
-            error={error}
-            onLoadPdf={handleLoadPdfWithLibrary}
-            onSetCurrentPage={setCurrentPage}
-            onRegionSelected={handleRegionSelected}
-            onToggleChat={() => setSidebarOpen(!sidebarOpen)}
+      {/* Main Content Area - No top bar needed! */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+        {/* Library View */}
+        {currentView === 'library' && (
+          <LibraryView
+            documents={documents}
+            onOpenDocument={handleOpenDocumentFromLibrary}
+            onAddDocument={handleAddDocumentFromLibrary}
           />
+        )}
 
-          {/* Chat Sidebar */}
-          <ChatSidebar
-            messages={messages}
-            currentQuestion={question}
-            onQuestionChange={setQuestion}
-            onSend={handleAsk}
-            isLoading={asking}
-            isOpen={sidebarOpen}
-            onToggle={() => setSidebarOpen(!sidebarOpen)}
-            hasActiveContext={activeContextData.length > 0}
-            activeContextData={activeContextData}
-            onClearContext={handleClearContext}
-          />
-        </>
-      )}
+        {/* Reader View */}
+        {currentView === 'reader' && (
+          <>
+            <PdfViewer
+              pdfDocument={pdfDocument}
+              allPageObjects={allPageObjects}
+              currentPage={currentPage}
+              totalPages={totalPages}
+              loading={loading}
+              error={error}
+              onLoadPdf={handleLoadPdfWithLibrary}
+              onSetCurrentPage={setCurrentPage}
+              onRegionSelected={handleRegionSelected}
+              onToggleChat={() => setSidebarOpen(!sidebarOpen)}
+              theme={theme}
+              onThemeToggle={toggleTheme}
+              documentMenuSlot={
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <button
+                    onClick={() => setCurrentView('library')}
+                    style={{
+                      padding: '8px 16px',
+                      fontSize: '13px',
+                      fontWeight: '500',
+                      cursor: 'pointer',
+                      border: '1px solid var(--stroke-1)',
+                      borderRadius: 'var(--radius-md)',
+                      backgroundColor: 'var(--surface-2)',
+                      color: 'var(--text-1)',
+                      transition: 'all 0.15s ease',
+                      letterSpacing: '0.3px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.backgroundColor = 'var(--surface-3)';
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.backgroundColor = 'var(--surface-2)';
+                    }}
+                    title="Go to Library"
+                  >
+                    <IconHome size={16} />
+                    Library
+                  </button>
+                  <DocumentMenu
+                    documents={documents}
+                    currentDocumentId={currentDocumentId}
+                    onOpenDocument={handleOpenDocumentFromMenu}
+                    onGoToLibrary={() => setCurrentView('library')}
+                    onOpenFile={handleOpenFileFromMenu}
+                  />
+                </div>
+              }
+            />
+
+            {/* Chat Sidebar */}
+            <ChatSidebar
+              messages={messages}
+              currentQuestion={question}
+              onQuestionChange={setQuestion}
+              onSend={handleAsk}
+              isLoading={asking}
+              isOpen={sidebarOpen}
+              onToggle={() => setSidebarOpen(!sidebarOpen)}
+              hasActiveContext={activeContextData.length > 0}
+              activeContextData={activeContextData}
+              onClearContext={handleClearContext}
+            />
+          </>
+        )}
+      </div>
     </div>
   );
 };
