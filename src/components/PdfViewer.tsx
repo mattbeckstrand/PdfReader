@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 // ✅ CORRECT: Import from legacy build for Electron compatibility
 import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist/legacy/build/pdf';
 
-import { Moon, PanelLeftClose, PanelLeftOpen, Sun } from 'lucide-react';
+import { Minus, Moon, PanelLeftClose, PanelLeftOpen, Plus, RotateCcw, Sun } from 'lucide-react';
 import type { RegionSelection } from '../types';
 import { PageThumbnailSidebar } from './PageThumbnailSidebar';
 import PdfPage from './PdfPage';
@@ -90,6 +90,12 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
     return saved !== null ? parseInt(saved, 10) : 200; // Default to 200px
   });
 
+  // Zoom level with localStorage persistence
+  const [zoom, setZoom] = useState(() => {
+    const saved = localStorage.getItem('pdfViewer.zoom');
+    return saved !== null ? parseFloat(saved) : 1.0; // Default to 100%
+  });
+
   // ===================================================================
   // Measure Container Width
   // ===================================================================
@@ -135,6 +141,13 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
   }, [sidebarWidth]);
 
   /**
+   * Persist zoom level to localStorage
+   */
+  useEffect(() => {
+    localStorage.setItem('pdfViewer.zoom', zoom.toString());
+  }, [zoom]);
+
+  /**
    * Toggle sidebar visibility
    */
   const handleToggleSidebar = useCallback(() => {
@@ -161,6 +174,21 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
     },
     [onSetCurrentPage]
   );
+
+  /**
+   * Zoom control functions
+   */
+  const handleZoomIn = useCallback(() => {
+    setZoom(prev => Math.min(prev + 0.1, 3.0)); // Max 300%
+  }, []);
+
+  const handleZoomOut = useCallback(() => {
+    setZoom(prev => Math.max(prev - 0.1, 0.5)); // Min 50%
+  }, []);
+
+  const handleResetZoom = useCallback(() => {
+    setZoom(1.0);
+  }, []);
 
   // ===================================================================
   // Event Handlers
@@ -327,7 +355,7 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
   }, [visiblePages, currentPage, onSetCurrentPage]);
 
   /**
-   * Keyboard shortcuts for navigation
+   * Keyboard shortcuts for navigation and zoom
    */
   useEffect(() => {
     if (!pdfDocument) return;
@@ -335,6 +363,25 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
     const handleKeyDown = (event: KeyboardEvent) => {
       // Don't interfere with input fields
       if (event.target instanceof HTMLInputElement) return;
+
+      // Zoom shortcuts (Cmd/Ctrl + Plus/Minus/0)
+      if (event.metaKey || event.ctrlKey) {
+        if (event.key === '=' || event.key === '+') {
+          event.preventDefault();
+          handleZoomIn();
+          return;
+        }
+        if (event.key === '-' || event.key === '_') {
+          event.preventDefault();
+          handleZoomOut();
+          return;
+        }
+        if (event.key === '0') {
+          event.preventDefault();
+          handleResetZoom();
+          return;
+        }
+      }
 
       const scrollToPage = (pageNum: number) => {
         const pageElement = pageRefsMap.current.get(pageNum);
@@ -390,7 +437,39 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [pdfDocument, currentPage, totalPages]);
+  }, [pdfDocument, currentPage, totalPages, handleZoomIn, handleZoomOut, handleResetZoom]);
+
+  /**
+   * Trackpad pinch-to-zoom handler
+   * Listens for wheel events with Ctrl/Cmd key (pinch gesture on trackpads)
+   */
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    const handleWheel = (event: WheelEvent) => {
+      // Check if this is a pinch-zoom gesture (Ctrl/Cmd + wheel)
+      if (event.ctrlKey || event.metaKey) {
+        event.preventDefault();
+
+        // Calculate zoom delta (negative deltaY = zoom in, positive = zoom out)
+        const delta = -event.deltaY;
+        const zoomSpeed = 0.01; // Adjust sensitivity
+        const zoomDelta = delta * zoomSpeed;
+
+        setZoom(prev => {
+          const newZoom = prev + zoomDelta;
+          return Math.max(0.5, Math.min(3.0, newZoom)); // Clamp between 50% and 300%
+        });
+      }
+    };
+
+    const container = containerRef.current;
+    container.addEventListener('wheel', handleWheel, { passive: false });
+
+    return () => {
+      container.removeEventListener('wheel', handleWheel);
+    };
+  }, []);
 
   // ===================================================================
   // Render
@@ -519,6 +598,107 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
                 / {totalPages}
               </span>
             </form>
+
+            {/* Zoom Controls */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                marginLeft: '20px',
+              }}
+            >
+              <button
+                onClick={handleZoomOut}
+                className="btn"
+                style={{
+                  padding: '6px 10px',
+                  fontSize: '13px',
+                  cursor: 'pointer',
+                  border: '1px solid var(--stroke-1)',
+                  borderRadius: 'var(--radius-md)',
+                  backgroundColor: 'transparent',
+                  color: 'var(--text-1)',
+                  transition: 'all 0.15s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.backgroundColor = 'var(--surface-3)';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.backgroundColor = 'transparent';
+                }}
+                title="Zoom out"
+              >
+                <Minus size={14} />
+              </button>
+
+              <span
+                style={{
+                  fontSize: '13px',
+                  color: 'var(--text-muted)',
+                  fontWeight: '400',
+                  minWidth: '50px',
+                  textAlign: 'center',
+                  letterSpacing: '0.3px',
+                }}
+              >
+                {Math.round(zoom * 100)}%
+              </span>
+
+              <button
+                onClick={handleZoomIn}
+                className="btn"
+                style={{
+                  padding: '6px 10px',
+                  fontSize: '13px',
+                  cursor: 'pointer',
+                  border: '1px solid var(--stroke-1)',
+                  borderRadius: 'var(--radius-md)',
+                  backgroundColor: 'transparent',
+                  color: 'var(--text-1)',
+                  transition: 'all 0.15s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.backgroundColor = 'var(--surface-3)';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.backgroundColor = 'transparent';
+                }}
+                title="Zoom in"
+              >
+                <Plus size={14} />
+              </button>
+
+              <button
+                onClick={handleResetZoom}
+                className="btn"
+                style={{
+                  padding: '6px 10px',
+                  fontSize: '13px',
+                  cursor: 'pointer',
+                  border: '1px solid var(--stroke-1)',
+                  borderRadius: 'var(--radius-md)',
+                  backgroundColor: 'transparent',
+                  color: 'var(--text-1)',
+                  transition: 'all 0.15s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.backgroundColor = 'var(--surface-3)';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.backgroundColor = 'transparent';
+                }}
+                title="Reset zoom"
+              >
+                <RotateCcw size={14} />
+              </button>
+            </div>
           </>
         )}
 
@@ -784,6 +964,9 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
               maxWidth: '900px',
               display: 'flex',
               flexDirection: 'column',
+              transform: `scale(${zoom})`,
+              transformOrigin: 'top center',
+              transition: 'transform 0.1s ease-out',
             }}
           >
             {allPageObjects.map((pageObject, index) => (
