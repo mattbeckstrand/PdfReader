@@ -39,6 +39,11 @@ const App: React.FC = () => {
     error?: string;
   }>({ loading: false });
 
+  const handleClearContext = useCallback(() => {
+    setLastSelection(null);
+    setExtractResult({ loading: false });
+  }, []);
+
   // Contextual chunking index + query
   const {
     ready: ctxReady,
@@ -64,11 +69,24 @@ const App: React.FC = () => {
     });
   }, [lastSelection, ctxReady, extractResult.text, getContextForSelection]);
 
+  // Build active context data for the input box indicator
+  const activeContextData = useMemo(() => {
+    const contextStrings: string[] = [];
+    if (extractResult.text) contextStrings.push(extractResult.text);
+    if (extractResult.latex) contextStrings.push(`LaTeX:\n${extractResult.latex}`);
+    if (selectionContext?.context?.length) {
+      contextStrings.push(
+        ...selectionContext.context.map(p => `p.${p.pageNumber} ¶${p.indexInPage + 1}: ${p.text}`)
+      );
+    }
+    return contextStrings;
+  }, [extractResult.text, extractResult.latex, selectionContext]);
+
   // Chat state
   const [question, setQuestion] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [asking, setAsking] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Streaming state using refs to persist across renders
   const streamStateRef = useRef({
@@ -78,9 +96,16 @@ const App: React.FC = () => {
     currentRequestId: '',
   });
 
+  // Interval ref so we can clear it when needed
+  const intervalIdRef = useRef<NodeJS.Timeout | null>(null);
+
   // Set up streaming listener with smooth character-by-character rendering
   useEffect(() => {
-    let intervalId: NodeJS.Timeout | null = null;
+    // Clear any existing interval when starting fresh
+    if (intervalIdRef.current) {
+      clearInterval(intervalIdRef.current);
+      intervalIdRef.current = null;
+    }
 
     const displayNextChars = () => {
       const state = streamStateRef.current;
@@ -103,25 +128,39 @@ const App: React.FC = () => {
       } else if (state.isDone && state.displayedText.length >= state.textBuffer.length) {
         // All text displayed and streaming is done
         setAsking(false);
-        if (intervalId) {
-          clearInterval(intervalId);
-          intervalId = null;
+        if (intervalIdRef.current) {
+          clearInterval(intervalIdRef.current);
+          intervalIdRef.current = null;
         }
       }
     };
 
     // Display characters every 30ms for smooth typewriter effect
-    intervalId = setInterval(displayNextChars, 30);
+    intervalIdRef.current = setInterval(displayNextChars, 30);
 
     const cleanup = window.electronAPI.ai.onStreamChunk(data => {
       const state = streamStateRef.current;
 
-      // If this is a new request, reset the state
+      // If this is a new request, reset the state and restart interval
       if (data.requestId !== state.currentRequestId) {
+        console.log('🔄 [STREAMING] New request detected, resetting state', {
+          old: state.currentRequestId,
+          new: data.requestId,
+        });
+
+        // Clear old interval
+        if (intervalIdRef.current) {
+          clearInterval(intervalIdRef.current);
+        }
+
+        // Reset state
         state.textBuffer = '';
         state.displayedText = '';
         state.isDone = false;
         state.currentRequestId = data.requestId;
+
+        // Start new interval
+        intervalIdRef.current = setInterval(displayNextChars, 30);
       }
 
       if (data.done) {
@@ -133,7 +172,10 @@ const App: React.FC = () => {
 
     return () => {
       cleanup();
-      if (intervalId) clearInterval(intervalId);
+      if (intervalIdRef.current) {
+        clearInterval(intervalIdRef.current);
+        intervalIdRef.current = null;
+      }
     };
   }, []);
 
@@ -152,13 +194,24 @@ const App: React.FC = () => {
       pageNumber: msg.pageNumber,
     }));
 
-    // Add user message
+    // Build context strings first
+    const contextStrings: string[] = [];
+    if (extractResult.text) contextStrings.push(extractResult.text);
+    if (extractResult.latex) contextStrings.push(`LaTeX:\n${extractResult.latex}`);
+    if (selectionContext?.context?.length) {
+      contextStrings.push(
+        ...selectionContext.context.map(p => `p.${p.pageNumber} ¶${p.indexInPage + 1}: ${p.text}`)
+      );
+    }
+
+    // Add user message with context
     const userMessage: ChatMessage = {
       id: `user-${Date.now()}`,
       role: 'user',
       content: question,
       timestamp: Date.now(),
       pageNumber: lastSelection?.pageNumber,
+      context: contextStrings.length > 0 ? contextStrings : undefined,
     };
     setMessages(prev => [...prev, userMessage]);
 
@@ -178,15 +231,6 @@ const App: React.FC = () => {
     setAsking(true);
 
     try {
-      const contextStrings: string[] = [];
-      if (extractResult.text) contextStrings.push(extractResult.text);
-      if (extractResult.latex) contextStrings.push(`LaTeX:\n${extractResult.latex}`);
-      if (selectionContext?.context?.length) {
-        contextStrings.push(
-          ...selectionContext.context.map(p => `p.${p.pageNumber} ¶${p.indexInPage + 1}: ${p.text}`)
-        );
-      }
-
       console.log('🤔 [ASK] Sending to AI:', {
         question: currentQuestion,
         contextCount: contextStrings.length,
@@ -228,6 +272,7 @@ const App: React.FC = () => {
   const handleRegionSelected = useCallback((selection: RegionSelection) => {
     setLastSelection(selection);
     setExtractResult({ loading: true });
+    setSidebarOpen(true); // Auto-open chat when region selected
 
     (async () => {
       try {
@@ -301,6 +346,7 @@ const App: React.FC = () => {
         onLoadPdf={loadPdf}
         onSetCurrentPage={setCurrentPage}
         onRegionSelected={handleRegionSelected}
+        onToggleChat={() => setSidebarOpen(!sidebarOpen)}
       />
 
       {/* Chat Sidebar */}
@@ -312,8 +358,9 @@ const App: React.FC = () => {
         isLoading={asking}
         isOpen={sidebarOpen}
         onToggle={() => setSidebarOpen(!sidebarOpen)}
-        extractedText={extractResult.success ? extractResult.text : undefined}
-        extractedLatex={extractResult.success ? extractResult.latex : undefined}
+        hasActiveContext={activeContextData.length > 0}
+        activeContextData={activeContextData}
+        onClearContext={handleClearContext}
       />
     </div>
   );
