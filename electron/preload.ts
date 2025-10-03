@@ -21,7 +21,14 @@ interface ElectronAPI {
 
   // AI operations
   ai: {
-    ask: (question: string, context: string[], pageNumber?: number) => Promise<AiAnswer>;
+    ask: (
+      question: string,
+      context: string[],
+      pageNumber?: number,
+      imageBase64?: string,
+      conversationHistory?: ConversationMessage[]
+    ) => Promise<{ requestId: string }>;
+    onStreamChunk: (callback: (data: StreamChunk) => void) => () => void;
     embed: (text: string) => Promise<number[]>;
     search: (documentId: string, query: string, topK?: number) => Promise<VectorSearchResult[]>;
   };
@@ -89,22 +96,6 @@ interface PdfPage {
   height: number;
 }
 
-interface AiAnswer {
-  id: string;
-  questionId: string;
-  answer: string;
-  citations?: Citation[];
-  model: string;
-  timestamp: number;
-  tokensUsed?: number;
-}
-
-interface Citation {
-  pageNumber: number;
-  text: string;
-  relevanceScore?: number;
-}
-
 interface VectorSearchResult {
   chunk: {
     id: string;
@@ -115,6 +106,19 @@ interface VectorSearchResult {
     endIndex: number;
   };
   similarity: number;
+}
+
+interface StreamChunk {
+  requestId: string;
+  chunk: string;
+  done: boolean;
+  pageNumber?: number;
+}
+
+interface ConversationMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  pageNumber?: number;
 }
 
 // ============================================================================
@@ -130,8 +134,28 @@ const electronAPI: ElectronAPI = {
   },
 
   ai: {
-    ask: (question: string, context: string[], pageNumber?: number) =>
-      ipcRenderer.invoke('ai:ask', { question, context, pageNumber }),
+    ask: (
+      question: string,
+      context: string[],
+      pageNumber?: number,
+      imageBase64?: string,
+      conversationHistory?: ConversationMessage[]
+    ) =>
+      ipcRenderer.invoke('ai:ask', {
+        question,
+        context,
+        pageNumber,
+        imageBase64,
+        conversationHistory,
+      }),
+    onStreamChunk: (callback: (data: StreamChunk) => void) => {
+      const listener = (_event: any, data: StreamChunk) => callback(data);
+      ipcRenderer.on('ai:stream-chunk', listener);
+      // Return cleanup function
+      return () => {
+        ipcRenderer.removeListener('ai:stream-chunk', listener);
+      };
+    },
     embed: (text: string) => ipcRenderer.invoke('ai:embed', text),
     search: (documentId: string, query: string, topK = 5) =>
       ipcRenderer.invoke('ai:search', { documentId, query, topK }),
