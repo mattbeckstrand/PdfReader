@@ -1,19 +1,19 @@
 :root {
-  /* Brand palette */
-  --celadon: #a1cca5; /* light accent */
-  --cambridge-blue: #8fb996; /* mid accent */
-  --cambridge-blue-2: #709775; /* deep accent */
-  --hunter-green: #415d43; /* dark green base */
-  --eerie-black: #111d13; /* page background */
+  /* Brand palette (neutralized to grayscale) */
+  --celadon: #bdbdbd; /* light accent → light gray */
+  --cambridge-blue: #9a9a9a; /* mid accent → medium gray */
+  --cambridge-blue-2: #7a7a7a; /* deep accent → darker gray */
+  --hunter-green: #1a1a1a; /* base tone → neutral dark */
+  --eerie-black: #0a0a0a; /* page background → near-black */
 
   /* Colors */
-  --bg: #04150d;
-  /* Surfaces derived from hunter green mixed into black for subtle tone */
-  --surface-1: color-mix(in oklab, var(--hunter-green) 12%, var(--eerie-black));
-  --surface-2: color-mix(in oklab, var(--hunter-green) 18%, var(--eerie-black));
-  --surface-3: color-mix(in oklab, var(--hunter-green) 8%, var(--eerie-black));
-  --stroke-1: color-mix(in oklab, var(--hunter-green) 28%, #222);
-  --stroke-2: color-mix(in oklab, var(--hunter-green) 40%, #2a2e33);
+  --bg: #0a0a0a;
+  /* Neutral grayscale surfaces and strokes */
+  --surface-1: #111111;
+  --surface-2: #161616;
+  --surface-3: #0d0d0d;
+  --stroke-1: #222222;
+  --stroke-2: #2a2a2a;
   --text-1: #e7e9ea;
   --text-2: #a3a8ae;
   --text-muted: #8b9096;
@@ -89,20 +89,12 @@ body {
 }
 
 .btn-primary {
-  background: linear-gradient(
-    135deg,
-    var(--accent),
-    color-mix(in oklab, var(--accent) 85%, #fff 15%)
-  );
-  color: #0a1410;
+  background: linear-gradient(135deg, #c9c9c9, #a6a6a6);
+  color: #0a0a0a;
   border-color: color-mix(in oklab, var(--accent) 60%, var(--stroke-1));
 }
 .btn-primary:hover {
-  background: linear-gradient(
-    135deg,
-    color-mix(in oklab, var(--accent) 92%, var(--cambridge-blue-2) 8%),
-    color-mix(in oklab, var(--accent) 85%, var(--cambridge-blue) 15%)
-  );
+  background: linear-gradient(135deg, #d6d6d6, #b0b0b0);
 }
 
 .textfield {
@@ -172,8 +164,8 @@ body {
   content: '';
   position: absolute;
   inset: 0 0 auto 0;
-  height: 320px;
-  background: radial-gradient(1200px 280px at 50% 0, rgba(255, 255, 255, 0.06), transparent 60%);
+  height: 420px;
+  background: radial-gradient(1400px 420px at 50% 0, rgba(255, 255, 255, 0.12), transparent 70%);
 }
 .library-container {
   max-width: 1440px;
@@ -320,11 +312,7 @@ body {
 }
 .card-progress > div {
   height: 100%;
-  background: linear-gradient(
-    90deg,
-    color-mix(in oklab, var(--accent) 70%, #fff 20%),
-    var(--cambridge-blue)
-  );
+  background: linear-gradient(90deg, #d0d0d0, #a0a0a0);
 }
 
 .empty {
