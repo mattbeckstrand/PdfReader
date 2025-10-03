@@ -6,6 +6,7 @@ import PdfViewer from './components/PdfViewer';
 import { useContextualChunks } from './features/contextual-chunking/useContextualChunks';
 import { useLibrary } from './hooks/useLibrary';
 import { usePdfDocument } from './hooks/usePdfDocument';
+import { useTheme } from './hooks/useTheme';
 import { generateThumbnail } from './lib/thumbnails';
 import type { RegionSelection } from './types';
 import type { LibraryDocument } from './types/library';
@@ -18,6 +19,8 @@ const App: React.FC = () => {
   // ===================================================================
   // Hooks
   // ===================================================================
+
+  const { theme, toggleTheme } = useTheme();
 
   const {
     currentPage,
@@ -162,18 +165,18 @@ const App: React.FC = () => {
           old: state.currentRequestId,
           new: data.requestId,
         });
-        
+
         // Clear old interval
         if (intervalIdRef.current) {
           clearInterval(intervalIdRef.current);
         }
-        
+
         // Reset state
         state.textBuffer = '';
         state.displayedText = '';
         state.isDone = false;
         state.currentRequestId = data.requestId;
-        
+
         // Start new interval
         intervalIdRef.current = setInterval(displayNextChars, 30);
       }
@@ -537,7 +540,14 @@ const App: React.FC = () => {
       });
       setAsking(false);
     }
-  }, [question, extractResult.text, extractResult.latex, selectionContext, lastSelection, messages]);
+  }, [
+    question,
+    extractResult.text,
+    extractResult.latex,
+    selectionContext,
+    lastSelection,
+    messages,
+  ]);
 
   // ===================================================================
   // Render
@@ -558,6 +568,8 @@ const App: React.FC = () => {
           documents={documents}
           onOpenDocument={handleOpenDocumentFromLibrary}
           onAddDocument={handleAddDocumentFromLibrary}
+          theme={theme}
+          onThemeToggle={toggleTheme}
         />
       )}
 
