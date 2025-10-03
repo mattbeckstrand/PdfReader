@@ -16,12 +16,22 @@
   border-radius: var(--radius-md);
   font-weight: 500;
   appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%23a3a8ae' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 14px center;
   transition: background var(--transition), border-color var(--transition);
   position: relative;
   z-index: 1; /* keep above adjacent search */
+}
+
+/* Dark mode dropdown arrow */
+:root .sort-select,
+:root[data-theme='dark'] .sort-select {
+  background-image: url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%23a3a8ae' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+/* Light mode dropdown arrow */
+:root[data-theme='light'] .sort-select {
+  background-image: url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%235f5b56' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 }
 .sort-select:focus {
   outline: none;
@@ -53,4 +63,10 @@
   backdrop-filter: blur(10px);
   border-radius: 999px;
   padding: 6px;
+}
+
+/* Light mode favorite badge - subtle blue tint */
+:root[data-theme='light'] .fav-badge {
+  background: rgba(74, 123, 167, 0.15);
+  backdrop-filter: blur(10px);
 }

@@ -1,8 +1,10 @@
 import { Clock, FileText, Grid3x3, List, Plus, Search, Star } from 'lucide-react';
 import React, { useCallback, useMemo, useState } from 'react';
+import type { Theme } from '../hooks/useTheme';
 import { PrimaryButton } from '../shared/components/PrimaryButton';
 import { SegmentedControl } from '../shared/components/SegmentedControl';
 import { TextField } from '../shared/components/TextField';
+import { ThemeToggle } from '../shared/components/ThemeToggle';
 import type { LibraryDocument, LibrarySortBy, LibraryViewMode } from '../types/library';
 
 // ===================================================================
@@ -13,6 +15,8 @@ interface LibraryViewProps {
   documents: LibraryDocument[];
   onOpenDocument: (doc: LibraryDocument) => void;
   onAddDocument: () => void;
+  theme: Theme;
+  onThemeToggle: () => void;
 }
 
 // ===================================================================
@@ -33,6 +37,8 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
   documents,
   onOpenDocument,
   onAddDocument,
+  theme,
+  onThemeToggle,
 }) => {
   // ===================================================================
   // Helpers (pure, typed)
@@ -48,16 +54,27 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
     return letters.join('').slice(0, 3);
   }, []);
 
-  const getThumbGradient = useCallback((seed: string): string => {
-    // Deterministic but grayscale: map seed to two lightness levels
-    let hash = 0;
-    for (let i = 0; i < seed.length; i++) {
-      hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
-    }
-    const l1 = 18 + (hash % 6); // 18% - 23%
-    const l2 = 12 + ((hash >> 3) % 6); // 12% - 17%
-    return `linear-gradient(135deg, hsl(0 0% ${l1}% / 1), hsl(0 0% ${l2}% / 1))`;
-  }, []);
+  const getThumbGradient = useCallback(
+    (seed: string): string => {
+      // Deterministic but grayscale: map seed to two lightness levels
+      let hash = 0;
+      for (let i = 0; i < seed.length; i++) {
+        hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
+      }
+
+      // Light mode: lighter gradients (85%-95%), Dark mode: darker gradients (12%-23%)
+      if (theme === 'light') {
+        const l1 = 88 + (hash % 7); // 88% - 94%
+        const l2 = 80 + ((hash >> 3) % 8); // 80% - 87%
+        return `linear-gradient(135deg, hsl(0 0% ${l1}% / 1), hsl(0 0% ${l2}% / 1))`;
+      } else {
+        const l1 = 18 + (hash % 6); // 18% - 23%
+        const l2 = 12 + ((hash >> 3) % 6); // 12% - 17%
+        return `linear-gradient(135deg, hsl(0 0% ${l1}% / 1), hsl(0 0% ${l2}% / 1))`;
+      }
+    },
+    [theme]
+  );
   // ===================================================================
   // State
   // ===================================================================
@@ -159,7 +176,10 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
             <div
               className="thumb-initials"
               aria-hidden
-              style={{ fontSize: isRecent ? '44px' : '60px' }}
+              style={{
+                fontSize: isRecent ? '44px' : '60px',
+                color: theme === 'light' ? 'rgba(0, 0, 0, 0.08)' : 'rgba(255, 255, 255, 0.14)',
+              }}
             >
               {initials}
             </div>
@@ -319,6 +339,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                 <option value="dateAdded">Date Added</option>
                 <option value="progress">Progress</option>
               </select>
+              <ThemeToggle theme={theme} onToggle={onThemeToggle} />
             </div>
           </div>
         </div>
