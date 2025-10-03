@@ -272,8 +272,33 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                     ),
                   }}
                 >
-                  {extractedLatex}
+                  {/* Convert MathPix format \( \) and \[ \] to $ and $$ for remark-math */}
+                  {extractedLatex
+                    .replace(/\\\(/g, '$')
+                    .replace(/\\\)/g, '$')
+                    .replace(/\\\[/g, '$$')
+                    .replace(/\\\]/g, '$$')}
                 </ReactMarkdown>
+                {/* Show raw LaTeX for debugging */}
+                <details style={{ marginTop: '6px' }}>
+                  <summary style={{ color: '#666', fontSize: '10px', cursor: 'pointer' }}>
+                    View raw LaTeX
+                  </summary>
+                  <pre
+                    style={{
+                      marginTop: '4px',
+                      padding: '4px',
+                      background: '#000',
+                      color: '#8cf',
+                      fontSize: '10px',
+                      borderRadius: '2px',
+                      overflow: 'auto',
+                      maxHeight: '100px',
+                    }}
+                  >
+                    {extractedLatex}
+                  </pre>
+                </details>
               </div>
             )}
           </div>
