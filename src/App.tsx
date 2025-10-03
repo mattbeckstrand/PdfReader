@@ -1,11 +1,9 @@
-import { MessageSquare } from 'lucide-react';
-import React, { useCallback, useEffect, useState } from 'react';
-import ChatSidebar, { Message } from './components/ChatSidebar';
-import HighlightActionMenu from './components/HighlightActionMenu';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { ChatMessage, ChatSidebar } from './components/ChatSidebar';
 import PdfViewer from './components/PdfViewer';
-import { useHighlight } from './hooks/useHighlight';
-import { usePdfContext } from './hooks/usePdfContext';
+import { useContextualChunks } from './features/contextual-chunking/useContextualChunks';
 import { usePdfDocument } from './hooks/usePdfDocument';
+import type { RegionSelection } from './types';
 
 // ===================================================================
 // Component Implementation
@@ -25,321 +23,177 @@ const App: React.FC = () => {
     setCurrentPage,
     pdfDocument,
     allPageObjects,
-    document: pdfDocumentData,
-    originalFile,
   } = usePdfDocument();
-
-  const { highlightedText, selectionPosition, captureSelection, clearSelection } = useHighlight();
-
-  const {
-    initializeContext,
-    ask: askWithContext,
-    clearContext,
-    contextInitialized,
-    isUploading,
-    loading: aiLoading,
-    error: aiError,
-  } = usePdfContext();
 
   // ===================================================================
   // State
   // ===================================================================
 
-  const [isChatOpen, setIsChatOpen] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [currentContext, setCurrentContext] = useState<string>('');
-  const [latestAnswer, setLatestAnswer] = useState<string | null>(null);
-  const [contextPreview, setContextPreview] = useState<string>(''); // For showing context in input area
+  const [lastSelection, setLastSelection] = useState<RegionSelection | null>(null);
+  const [extractResult, setExtractResult] = useState<{
+    loading: boolean;
+    success?: boolean;
+    text?: string;
+    latex?: string;
+    source?: string;
+    error?: string;
+  }>({ loading: false });
 
-  // ===================================================================
-  // Initialize PDF Context (Upload to Gemini)
-  // ===================================================================
+  // Contextual chunking index + query
+  const {
+    ready: ctxReady,
+    build: buildContextIndex,
+    getContextForSelection,
+  } = useContextualChunks({
+    allPageObjects,
+  });
 
-  /**
-   * When PDF loads, upload it to Gemini for full document context
-   */
   useEffect(() => {
-    if (originalFile && pdfDocumentData && !contextInitialized && !isUploading) {
-      console.log('🚀 PDF loaded, initializing AI context...');
-      initializeContext(originalFile, {
-        title: pdfDocumentData.title,
-        pages: pdfDocumentData.numPages,
-        author: pdfDocumentData.metadata?.author,
-      }).catch(err => {
-        console.error('Failed to initialize PDF context:', err);
+    if (allPageObjects.length > 0) {
+      void buildContextIndex();
+    }
+  }, [allPageObjects, buildContextIndex]);
+
+  const selectionContext = useMemo(() => {
+    if (!lastSelection || !ctxReady) return null;
+    const selectedText = extractResult.text || '';
+    return getContextForSelection(lastSelection.pageNumber, selectedText, {
+      windowBefore: 2,
+      windowAfter: 2,
+      minParagraphLength: 30,
+    });
+  }, [lastSelection, ctxReady, extractResult.text, getContextForSelection]);
+
+  // Chat state
+  const [question, setQuestion] = useState('');
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [asking, setAsking] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+
+  const handleAsk = useCallback(async () => {
+    console.log('🤔 [ASK] Sending message');
+    if (!question.trim()) {
+      console.warn('⚠️ [ASK] No question entered');
+      return;
+    }
+
+    // Add user message
+    const userMessage: ChatMessage = {
+      id: `user-${Date.now()}`,
+      role: 'user',
+      content: question,
+      timestamp: Date.now(),
+      pageNumber: lastSelection?.pageNumber,
+    };
+    setMessages(prev => [...prev, userMessage]);
+
+    // Clear input and start loading
+    const currentQuestion = question;
+    setQuestion('');
+    setAsking(true);
+
+    try {
+      const contextStrings: string[] = [];
+      if (extractResult.text) contextStrings.push(extractResult.text);
+      if (extractResult.latex) contextStrings.push(`LaTeX:\n${extractResult.latex}`);
+      if (selectionContext?.context?.length) {
+        contextStrings.push(
+          ...selectionContext.context.map(p => `p.${p.pageNumber} ¶${p.indexInPage + 1}: ${p.text}`)
+        );
+      }
+
+      console.log('🤔 [ASK] Sending to AI:', {
+        question: currentQuestion,
+        contextCount: contextStrings.length,
+        pageNumber: lastSelection?.pageNumber,
       });
-    }
-  }, [originalFile, pdfDocumentData, contextInitialized, isUploading, initializeContext]);
 
-  /**
-   * Cleanup: Clear context when component unmounts or PDF changes
-   */
-  useEffect(() => {
-    return () => {
-      if (contextInitialized) {
-        console.log('🧹 Component unmounting, clearing PDF context');
-        clearContext().catch(err => console.error('Failed to clear context:', err));
-      }
-    };
-  }, [contextInitialized, clearContext]);
+      const res = await window.electronAPI.ai.ask(
+        currentQuestion,
+        contextStrings,
+        lastSelection?.pageNumber
+      );
 
-  // ===================================================================
-  // Text Selection Handler
-  // ===================================================================
+      console.log('✅ [ASK] AI Response received:', res);
 
-  /**
-   * Handle text selection events on the document
-   */
-  useEffect(() => {
-    const handleMouseUp = () => {
-      const selection = window.getSelection();
-      if (selection && selection.toString().trim().length > 0) {
-        captureSelection();
-      }
-    };
-
-    document.addEventListener('mouseup', handleMouseUp);
-    return () => document.removeEventListener('mouseup', handleMouseUp);
-  }, [captureSelection]);
-
-  /**
-   * Handle keyboard shortcuts
-   */
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Command+Shift+K (Mac) or Ctrl+Shift+K (Windows/Linux)
-      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'K') {
-        e.preventDefault();
-        setIsChatOpen(prev => !prev);
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, []);
-
-  // ===================================================================
-  // AI Response Handler
-  // ===================================================================
-
-  /**
-   * When AI returns an answer, add it to messages
-   */
-  useEffect(() => {
-    if (latestAnswer) {
-      const newMessage: Message = {
-        id: Date.now().toString(),
+      // Add assistant message
+      const assistantMessage: ChatMessage = {
+        id: `assistant-${Date.now()}`,
         role: 'assistant',
-        content: latestAnswer,
-        timestamp: new Date(),
+        content: res?.answer || 'No response received',
+        timestamp: Date.now(),
+        pageNumber: lastSelection?.pageNumber,
       };
-      setMessages(prev => [...prev, newMessage]);
-      setLatestAnswer(null);
-    }
-  }, [latestAnswer]);
-
-  /**
-   * Handle AI errors by adding error message to chat
-   */
-  useEffect(() => {
-    if (aiError) {
-      const errorMessage: Message = {
-        id: Date.now().toString(),
+      setMessages(prev => [...prev, assistantMessage]);
+    } catch (e: any) {
+      console.error('❌ [ASK] Error:', e);
+      // Add error message
+      const errorMessage: ChatMessage = {
+        id: `error-${Date.now()}`,
         role: 'assistant',
-        content: `Sorry, I encountered an error: ${aiError}`,
-        timestamp: new Date(),
+        content: `Error: ${e?.message || 'Failed to get answer'}`,
+        timestamp: Date.now(),
       };
       setMessages(prev => [...prev, errorMessage]);
+    } finally {
+      setAsking(false);
     }
-  }, [aiError]);
+  }, [question, extractResult.text, extractResult.latex, selectionContext, lastSelection]);
 
   // ===================================================================
   // Action Handlers
   // ===================================================================
 
   /**
-   * Handle "Explain This" action
+   * Handle region selection from PDF page
    */
-  const handleExplain = useCallback(() => {
-    if (!highlightedText || !contextInitialized) {
-      if (!contextInitialized) {
-        alert('Please wait for the PDF to be processed by AI...');
-      }
-      return;
-    }
+  const handleRegionSelected = useCallback((selection: RegionSelection) => {
+    setLastSelection(selection);
+    setExtractResult({ loading: true });
 
-    // Store context for follow-up questions
-    setCurrentContext(highlightedText);
+    (async () => {
+      try {
+        console.log('🔍 [EXTRACTION] Attempting to retrieve PDF path from localStorage...');
+        const pdfPath = localStorage.getItem('lastPdfPath');
+        console.log('🔍 [EXTRACTION] Retrieved path:', pdfPath);
+        console.log('🔍 [EXTRACTION] All localStorage keys:', Object.keys(localStorage));
 
-    // Add user message to chat with shortened context preview
-    const preview =
-      highlightedText.length > 60 ? `${highlightedText.substring(0, 60)}...` : highlightedText;
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      role: 'user',
-      content: `📄 Context: "${preview}"\n\nExplain this`,
-      timestamp: new Date(),
-    };
-    setMessages(prev => [...prev, userMessage]);
+        if (!pdfPath) {
+          console.error('❌ [EXTRACTION] No PDF path found in localStorage!');
+          setExtractResult({ loading: false, success: false, error: 'No PDF path available' });
+          return;
+        }
 
-    // Open chat sidebar
-    setIsChatOpen(true);
-
-    // Ask AI with full PDF context
-    askWithContext(
-      `Explain this text in simple terms: "${highlightedText}"`,
-      highlightedText,
-      currentPage
-    )
-      .then(answer => {
-        setLatestAnswer(answer);
-      })
-      .catch(err => {
-        console.error('Failed to get AI response:', err);
-      });
-
-    // Clear selection
-    clearSelection();
-  }, [highlightedText, currentPage, askWithContext, clearSelection, contextInitialized]);
-
-  /**
-   * Handle "Ask AI" action
-   */
-  const handleAskAI = useCallback(() => {
-    if (!highlightedText || !contextInitialized) {
-      if (!contextInitialized) {
-        alert('Please wait for the PDF to be processed by AI...');
-      }
-      return;
-    }
-
-    // Store context
-    setCurrentContext(highlightedText);
-
-    // Set context preview for input area
-    const preview =
-      highlightedText.length > 60 ? `${highlightedText.substring(0, 60)}...` : highlightedText;
-    setContextPreview(preview);
-
-    // Open chat sidebar (no messages added - context shown in input area)
-    setIsChatOpen(true);
-
-    // Clear selection
-    clearSelection();
-  }, [highlightedText, clearSelection, contextInitialized]);
-
-  /**
-   * Handle "Define" action
-   */
-  const handleDefine = useCallback(() => {
-    if (!highlightedText || !contextInitialized) {
-      if (!contextInitialized) {
-        alert('Please wait for the PDF to be processed by AI...');
-      }
-      return;
-    }
-
-    // Store context
-    setCurrentContext(highlightedText);
-
-    // Add user message with shortened context preview
-    const preview =
-      highlightedText.length > 60 ? `${highlightedText.substring(0, 60)}...` : highlightedText;
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      role: 'user',
-      content: `📄 Context: "${preview}"\n\nDefine this`,
-      timestamp: new Date(),
-    };
-    setMessages(prev => [...prev, userMessage]);
-
-    // Open chat sidebar
-    setIsChatOpen(true);
-
-    // Ask for definition with full PDF context
-    askWithContext(
-      `Provide a clear definition of: "${highlightedText}"`,
-      highlightedText,
-      currentPage
-    )
-      .then(answer => {
-        setLatestAnswer(answer);
-      })
-      .catch(err => {
-        console.error('Failed to get AI response:', err);
-      });
-
-    // Clear selection
-    clearSelection();
-  }, [highlightedText, currentPage, askWithContext, clearSelection, contextInitialized]);
-
-  /**
-   * Handle "Annotate" action
-   */
-  const handleAnnotate = useCallback(() => {
-    if (!highlightedText) return;
-
-    // For now, just show a message (can be enhanced later)
-    alert(`Annotation feature coming soon!\n\nSelected text: "${highlightedText}"`);
-
-    // Clear selection
-    clearSelection();
-  }, [highlightedText, clearSelection]);
-
-  /**
-   * Handle sending a message in the chat
-   */
-  const handleSendMessage = useCallback(
-    (message: string) => {
-      if (!contextInitialized) {
-        alert('Please wait for the PDF to be processed by AI...');
-        return;
-      }
-
-      // Add user message
-      const userMessage: Message = {
-        id: Date.now().toString(),
-        role: 'user',
-        content: message,
-        timestamp: new Date(),
-      };
-      setMessages(prev => [...prev, userMessage]);
-
-      // Clear context preview after first message is sent
-      setContextPreview('');
-
-      // Ask AI with full PDF context
-      askWithContext(message, currentContext, currentPage)
-        .then(answer => {
-          setLatestAnswer(answer);
-        })
-        .catch(err => {
-          console.error('Failed to get AI response:', err);
+        console.log('✅ [EXTRACTION] Using PDF path:', pdfPath);
+        const res = await window.electronAPI.extract.region(pdfPath, selection.pageNumber, {
+          x: selection.pdf.x,
+          y: selection.pdf.y,
+          width: selection.pdf.width,
+          height: selection.pdf.height,
         });
-    },
-    [currentContext, currentPage, askWithContext, contextInitialized]
-  );
-
-  /**
-   * Handle closing the chat sidebar
-   */
-  const handleCloseChat = useCallback(() => {
-    setIsChatOpen(false);
-    setContextPreview(''); // Clear context preview when closing
-  }, []);
-
-  /**
-   * Handle closing the action menu
-   */
-  const handleCloseMenu = useCallback(() => {
-    clearSelection();
-  }, [clearSelection]);
-
-  /**
-   * Toggle chat sidebar
-   */
-  const handleToggleChat = useCallback(() => {
-    setIsChatOpen(prev => !prev);
+        if (res.success) {
+          setExtractResult({
+            loading: false,
+            success: true,
+            text: res.text,
+            latex: res.latex,
+            source: res.source,
+          });
+        } else {
+          setExtractResult({
+            loading: false,
+            success: false,
+            error: res.error || 'Extraction failed',
+          });
+        }
+      } catch (err: any) {
+        setExtractResult({
+          loading: false,
+          success: false,
+          error: err?.message || 'Extraction error',
+        });
+      }
+    })();
   }, []);
 
   // ===================================================================
@@ -357,117 +211,20 @@ const App: React.FC = () => {
         error={error}
         onLoadPdf={loadPdf}
         onSetCurrentPage={setCurrentPage}
+        onRegionSelected={handleRegionSelected}
       />
-
-      {/* PDF Upload Progress Indicator */}
-      {isUploading && (
-        <div
-          style={{
-            position: 'fixed',
-            top: '50%',
-            left: '50%',
-            transform: 'translate(-50%, -50%)',
-            backgroundColor: '#0a0a0a',
-            border: '1px solid #333',
-            color: '#888',
-            padding: '30px 40px',
-            borderRadius: '12px',
-            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.5)',
-            zIndex: 1000,
-            textAlign: 'center',
-            minWidth: '280px',
-          }}
-        >
-          <div
-            style={{
-              width: '30px',
-              height: '30px',
-              border: '1px solid #333',
-              borderTop: '1px solid #fff',
-              borderRadius: '50%',
-              margin: '0 auto 20px',
-              animation: 'spin 1s linear infinite',
-            }}
-          />
-          <p
-            style={{
-              margin: 0,
-              fontSize: '13px',
-              fontWeight: '300',
-              letterSpacing: '0.5px',
-            }}
-          >
-            Preparing document for AI...
-          </p>
-          <style>{`
-            @keyframes spin {
-              0% { transform: rotate(0deg); }
-              100% { transform: rotate(360deg); }
-            }
-          `}</style>
-        </div>
-      )}
-
-      {/* AI Chat Button */}
-      {contextInitialized && !isUploading && pdfDocument && (
-        <button
-          onClick={handleToggleChat}
-          style={{
-            position: 'fixed',
-            top: '18px',
-            right: '24px',
-            backgroundColor: isChatOpen ? '#1a1a1a' : '#0a0a0a',
-            border: '1px solid #333',
-            color: isChatOpen ? '#fff' : '#888',
-            padding: '0',
-            borderRadius: '10px',
-            boxShadow: '0 2px 10px rgba(0, 0, 0, 0.3)',
-            zIndex: 999,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            width: '36px',
-            height: '36px',
-            cursor: 'pointer',
-            transition: 'all 0.15s',
-          }}
-          onMouseEnter={e => {
-            e.currentTarget.style.backgroundColor = '#ffffff';
-            e.currentTarget.style.color = '#000';
-            e.currentTarget.style.borderColor = '#ffffff';
-          }}
-          onMouseLeave={e => {
-            e.currentTarget.style.backgroundColor = isChatOpen ? '#1a1a1a' : '#0a0a0a';
-            e.currentTarget.style.color = isChatOpen ? '#fff' : '#888';
-            e.currentTarget.style.borderColor = '#333';
-          }}
-          title="⌘⇧K"
-        >
-          <MessageSquare size={18} />
-        </button>
-      )}
-
-      {/* Highlight Action Menu */}
-      {highlightedText && selectionPosition && (
-        <HighlightActionMenu
-          selectedText={highlightedText}
-          position={selectionPosition}
-          onExplain={handleExplain}
-          onAskAI={handleAskAI}
-          onDefine={handleDefine}
-          onAnnotate={handleAnnotate}
-          onClose={handleCloseMenu}
-        />
-      )}
 
       {/* Chat Sidebar */}
       <ChatSidebar
-        isOpen={isChatOpen}
-        onClose={handleCloseChat}
         messages={messages}
-        onSendMessage={handleSendMessage}
-        isLoading={aiLoading}
-        contextPreview={contextPreview}
+        currentQuestion={question}
+        onQuestionChange={setQuestion}
+        onSend={handleAsk}
+        isLoading={asking}
+        isOpen={sidebarOpen}
+        onToggle={() => setSidebarOpen(!sidebarOpen)}
+        extractedText={extractResult.success ? extractResult.text : undefined}
+        extractedLatex={extractResult.success ? extractResult.latex : undefined}
       />
     </div>
   );

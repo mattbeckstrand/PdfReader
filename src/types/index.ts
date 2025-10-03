@@ -39,6 +39,18 @@ export interface BoundingBox {
   height: number;
 }
 
+export interface RegionSelection {
+  pageNumber: number;
+  // Bounding box in CSS pixels relative to the rendered page (canvas/textLayer)
+  css: BoundingBox & { x2: number; y2: number };
+  // Bounding box mapped to the PDF coordinate space at scale=1 (PDF points-like)
+  pdf: BoundingBox & { x2: number; y2: number };
+  // Scale factor applied when rendering this page (css = pdf * scale)
+  scaleFactor: number;
+  // Timestamp of when the selection was made
+  timestamp: number;
+}
+
 // ============================================================================
 // Highlight & Selection Types
 // ============================================================================

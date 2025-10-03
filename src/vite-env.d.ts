@@ -23,6 +23,10 @@ interface ImportMetaEnv {
   // AI Configuration (Optional)
   readonly VITE_AI_TEMPERATURE?: string;
   readonly VITE_AI_MAX_TOKENS?: string;
+
+  // Mathpix OCR configuration
+  readonly VITE_MATHPIX_APP_ID?: string;
+  readonly VITE_MATHPIX_APP_KEY?: string;
 }
 
 interface ImportMeta {

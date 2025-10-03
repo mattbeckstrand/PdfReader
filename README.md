@@ -64,6 +64,29 @@ Make reading complex documents radically easier by embedding a context-aware AI 
    npm run electron:build
    ```
 
+### Smart extraction (text → OCR fallback)
+
+Set MathPix credentials (optional):
+
+```
+export MATHPIX_APP_ID=your_app_id
+export MATHPIX_APP_KEY=your_app_key
+```
+
+Install Python deps (PyMuPDF, requests). Optional offline LaTeX OCR via pix2tex/latexocr:
+
+```
+pip3 install pymupdf requests
+# optional offline OCR; see their docs for models
+pip3 install pix2tex[gui]
+```
+
+Renderer usage:
+
+```ts
+await window.electronAPI.extract.region(pdfPath, pageNumber, { x, y, width, height });
+```
+
 ## 📁 Project Structure
 
 ```
