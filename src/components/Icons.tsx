@@ -67,6 +67,28 @@ export const IconHome = ({ size, ...rest }: IconProps) => (
   </svg>
 );
 
+export const IconShare = ({ size, ...rest }: IconProps) => (
+  <svg {...baseProps(size)} {...rest}>
+    <circle cx="18" cy="5" r="3" />
+    <circle cx="6" cy="12" r="3" />
+    <circle cx="18" cy="19" r="3" />
+    <path d="M8.59 13.51l6.83 3.98M15.41 6.51l-6.82 3.98" />
+  </svg>
+);
+
+export const IconHighlight = ({ size, ...rest }: IconProps) => (
+  <svg {...baseProps(size)} {...rest}>
+    <path d="M9 11 4 6l2-2 5 5L20 0l2 2-11 11Z" />
+    <path d="M9 21H2v-7l9-9 7 7-9 9Z" />
+  </svg>
+);
+
+export const IconChevronDown = ({ size, ...rest }: IconProps) => (
+  <svg {...baseProps(size)} {...rest}>
+    <path d="M6 9l6 6 6-6" />
+  </svg>
+);
+
 export default {
   IconChat,
   IconSend,
@@ -76,4 +98,7 @@ export default {
   IconInfo,
   IconArrowUp,
   IconHome,
+  IconShare,
+  IconHighlight,
+  IconChevronDown,
 };

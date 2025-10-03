@@ -72,6 +72,11 @@ export interface ElectronAPI {
     openExternal: (url: string) => Promise<void>;
   };
 
+  // Shell operations
+  shell: {
+    showItemInFolder: (fullPath: string) => Promise<void>;
+  };
+
   // Extraction
   extract: {
     region: (
