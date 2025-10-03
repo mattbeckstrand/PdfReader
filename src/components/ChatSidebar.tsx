@@ -4,6 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import rehypeKatex from 'rehype-katex';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
+import { IconArrowUp, IconChat, IconClose, IconGrip } from './Icons';
 
 // ===================================================================
 // Types
@@ -46,6 +47,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
   extractedLatex,
 }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
     try {
@@ -61,12 +63,49 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
   const isResizingRef = useRef<boolean>(false);
   const dragStartXRef = useRef<number>(0);
   const startWidthRef = useRef<number>(0);
+  const userHasScrolledAwayRef = useRef<boolean>(false);
   const MIN_WIDTH = 280;
   const MAX_WIDTH = 800;
 
-  // Auto-scroll to bottom when new messages arrive
+  // Detect when user manually scrolls away from bottom
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 10;
+
+      if (isAtBottom) {
+        // User scrolled back to bottom - re-enable auto-scroll
+        userHasScrolledAwayRef.current = false;
+      } else if (!userHasScrolledAwayRef.current) {
+        // Check if this was an intentional scroll up
+        const wasNearBottom =
+          container.scrollHeight - container.scrollTop - container.clientHeight < 50;
+        if (!wasNearBottom) {
+          // User scrolled significantly away - disable auto-scroll
+          userHasScrolledAwayRef.current = true;
+        }
+      }
+    };
+
+    container.addEventListener('scroll', handleScroll);
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // Auto-scroll to bottom only if user hasn't scrolled away
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    // Don't auto-scroll if user has manually scrolled away
+    if (userHasScrolledAwayRef.current) return;
+
+    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 50;
+
+    if (isNearBottom) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [messages]);
 
   // Focus input when sidebar opens
@@ -146,21 +185,22 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
           zIndex: 1001,
           width: '40px',
           height: '40px',
-          borderRadius: '8px',
-          border: '1px solid #333',
-          background: '#1a1a1a',
+          borderRadius: '10px',
+          border: '1px solid #2a2a2a',
+          background: 'linear-gradient(180deg, #101010, #0a0a0a)',
           color: '#fff',
           cursor: 'pointer',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           fontSize: '18px',
-          transition: 'all 0.3s ease',
-          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3)',
+          transition: 'all 0.2s ease',
+          boxShadow: '0 6px 16px rgba(0, 0, 0, 0.35)',
         }}
         title={isOpen ? 'Close chat' : 'Open chat'}
+        aria-label={isOpen ? 'Close chat' : 'Open chat'}
       >
-        {isOpen ? '✕' : '💬'}
+        {isOpen ? <IconClose size={18} /> : <IconChat size={18} />}
       </button>
 
       {/* Sidebar */}
@@ -188,14 +228,20 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
             position: 'absolute',
             left: 0,
             top: 0,
-            width: '6px',
+            width: '8px',
             height: '100%',
             cursor: 'col-resize',
             zIndex: 1001,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
             background: 'linear-gradient(to right, rgba(255,255,255,0.06), rgba(255,255,255,0))',
           }}
           title="Drag to resize"
-        />
+          aria-label="Drag to resize chat sidebar"
+        >
+          <IconGrip size={14} />
+        </div>
         {/* Header */}
         <div
           style={{
@@ -206,8 +252,10 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
             gap: '10px',
           }}
         >
-          <span style={{ fontSize: '18px' }}>💬</span>
-          <span style={{ fontSize: '14px', fontWeight: '500', color: '#fff' }}>AI Chat</span>
+          <span style={{ display: 'flex', alignItems: 'center', color: '#9aa4af' }}>
+            <IconChat size={18} />
+          </span>
+          <span style={{ fontSize: '14px', fontWeight: 600, color: '#fff' }}>AI Chat</span>
           {messages.length > 0 && (
             <span
               style={{
@@ -304,38 +352,108 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
           </div>
         )}
 
+        {/* Input Area - Show at top when no messages */}
+        {messages.length === 0 && (
+          <form
+            onSubmit={handleSubmit}
+            style={{
+              padding: '16px',
+              borderBottom: '1px solid #1a1a1a',
+              background: '#0a0a0a',
+            }}
+          >
+            <div
+              style={{
+                position: 'relative',
+                display: 'flex',
+                alignItems: 'flex-end',
+                background: 'linear-gradient(180deg, #0e0e10, #0b0b0d)',
+                border: '1px solid #2a2a2a',
+                borderRadius: '10px',
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)',
+              }}
+            >
+              <textarea
+                ref={inputRef}
+                value={currentQuestion}
+                onChange={e => onQuestionChange(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Ask about the selected text..."
+                disabled={isLoading}
+                style={{
+                  flex: 1,
+                  background: 'transparent',
+                  border: 'none',
+                  outline: 'none',
+                  padding: '12px 14px',
+                  paddingRight: '52px',
+                  color: '#fff',
+                  fontSize: '13px',
+                  fontFamily: 'inherit',
+                  resize: 'none',
+                  minHeight: '48px',
+                  maxHeight: '120px',
+                  lineHeight: '1.4',
+                }}
+                rows={1}
+              />
+              <button
+                type="submit"
+                disabled={isLoading || !currentQuestion.trim()}
+                style={{
+                  position: 'absolute',
+                  right: '8px',
+                  bottom: '8px',
+                  background: currentQuestion.trim() && !isLoading ? '#fff' : '#2a2a2a',
+                  color: currentQuestion.trim() && !isLoading ? '#000' : '#666',
+                  border: 'none',
+                  borderRadius: '50%',
+                  padding: 0,
+                  cursor: currentQuestion.trim() && !isLoading ? 'pointer' : 'not-allowed',
+                  transition: 'all 0.15s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '26px',
+                  height: '26px',
+                  boxShadow:
+                    currentQuestion.trim() && !isLoading
+                      ? '0 2px 8px rgba(255,255,255,0.2)'
+                      : 'none',
+                }}
+                title={isLoading ? 'Sending...' : 'Send message'}
+                aria-label="Send message"
+              >
+                {isLoading ? '...' : <IconArrowUp size={14} />}
+              </button>
+            </div>
+            <div
+              style={{
+                marginTop: '8px',
+                fontSize: '11px',
+                color: '#555',
+                textAlign: 'center',
+              }}
+            >
+              Press Enter to send · Shift+Enter for new line
+            </div>
+          </form>
+        )}
+
         {/* Messages */}
         <div
+          ref={messagesContainerRef}
           style={{
             flex: 1,
             overflowY: 'auto',
-            padding: '16px',
+            padding: sidebarWidth < 350 ? '12px 8px' : '16px',
             display: 'flex',
             flexDirection: 'column',
-            gap: '16px',
+            gap: '6px',
           }}
         >
           {messages.length === 0 ? (
-            <div
-              style={{
-                flex: 1,
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#555',
-                textAlign: 'center',
-                padding: '40px 20px',
-              }}
-            >
-              <div style={{ fontSize: '48px', marginBottom: '16px' }}>💬</div>
-              <div style={{ fontSize: '14px', marginBottom: '8px', color: '#888' }}>
-                No messages yet
-              </div>
-              <div style={{ fontSize: '12px', color: '#555', lineHeight: '1.6' }}>
-                Select text in the PDF and ask a question to get started
-              </div>
-            </div>
+            <div style={{ flex: 1 }} />
           ) : (
             messages.map(msg => (
               <div
@@ -343,44 +461,33 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                 style={{
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: '8px',
+                  gap: '4px',
                 }}
               >
-                {/* Message Header */}
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    fontSize: '12px',
-                  }}
-                >
-                  <span style={{ fontSize: '16px' }}>{msg.role === 'user' ? '👤' : '🤖'}</span>
-                  <span style={{ fontWeight: '500', color: msg.role === 'user' ? '#0af' : '#8c8' }}>
-                    {msg.role === 'user' ? 'You' : 'Assistant'}
-                  </span>
-                  {msg.pageNumber && (
-                    <span style={{ color: '#555', fontSize: '11px' }}>· Page {msg.pageNumber}</span>
-                  )}
-                  <span style={{ marginLeft: 'auto', color: '#555', fontSize: '11px' }}>
-                    {new Date(msg.timestamp).toLocaleTimeString()}
-                  </span>
-                </div>
-
                 {/* Message Content */}
                 <div
                   style={{
-                    background: msg.role === 'user' ? '#1a1a1a' : '#0f0f0f',
-                    border: `1px solid ${msg.role === 'user' ? '#222' : '#1a1a1a'}`,
-                    borderRadius: '8px',
-                    padding: '12px',
+                    padding: '8px 0',
                     fontSize: '13px',
-                    lineHeight: '1.6',
+                    lineHeight: '1.5',
                     color: '#eee',
+                    wordBreak: 'break-word',
+                    overflowWrap: 'break-word',
                   }}
                 >
                   {msg.role === 'user' ? (
-                    <div style={{ whiteSpace: 'pre-wrap' }}>{msg.content}</div>
+                    <div
+                      style={{
+                        background: 'linear-gradient(180deg, #0e0e10, #0b0b0d)',
+                        border: '1px solid #2a2a2a',
+                        borderRadius: '10px',
+                        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)',
+                        padding: '12px 14px',
+                        whiteSpace: 'pre-wrap',
+                      }}
+                    >
+                      {msg.content}
+                    </div>
                   ) : (
                     <ReactMarkdown
                       remarkPlugins={[remarkGfm, remarkMath]}
@@ -405,11 +512,12 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                             <pre
                               style={{
                                 background: '#1a1a1a',
-                                padding: '12px',
-                                borderRadius: '6px',
+                                padding: '8px',
+                                borderRadius: '4px',
                                 overflow: 'auto',
-                                fontSize: '12px',
+                                fontSize: '11px',
                                 fontFamily: 'monospace',
+                                margin: '4px 0',
                               }}
                             >
                               <code {...props}>{children}</code>
@@ -422,16 +530,82 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                             {children}
                           </a>
                         ),
-                        // Style lists
+                        // Style paragraphs
+                        p: ({ children, ...props }: any) => (
+                          <p style={{ margin: '8px 0 8px 0' }} {...props}>
+                            {children}
+                          </p>
+                        ),
+                        // Style headings - compact
+                        h1: ({ children, ...props }: any) => (
+                          <h1
+                            style={{ fontSize: '16px', fontWeight: 600, margin: '12px 0 6px 0' }}
+                            {...props}
+                          >
+                            {children}
+                          </h1>
+                        ),
+                        h2: ({ children, ...props }: any) => (
+                          <h2
+                            style={{ fontSize: '15px', fontWeight: 600, margin: '10px 0 6px 0' }}
+                            {...props}
+                          >
+                            {children}
+                          </h2>
+                        ),
+                        h3: ({ children, ...props }: any) => (
+                          <h3
+                            style={{ fontSize: '14px', fontWeight: 600, margin: '8px 0 4px 0' }}
+                            {...props}
+                          >
+                            {children}
+                          </h3>
+                        ),
+                        // Style lists - minimal indentation
                         ul: ({ children, ...props }: any) => (
-                          <ul style={{ marginLeft: '20px', marginTop: '8px' }} {...props}>
+                          <ul
+                            style={{
+                              marginLeft: '12px',
+                              marginTop: '4px',
+                              marginBottom: '4px',
+                              paddingLeft: '8px',
+                            }}
+                            {...props}
+                          >
                             {children}
                           </ul>
                         ),
                         ol: ({ children, ...props }: any) => (
-                          <ol style={{ marginLeft: '20px', marginTop: '8px' }} {...props}>
+                          <ol
+                            style={{
+                              marginLeft: '12px',
+                              marginTop: '4px',
+                              marginBottom: '4px',
+                              paddingLeft: '8px',
+                            }}
+                            {...props}
+                          >
                             {children}
                           </ol>
+                        ),
+                        li: ({ children, ...props }: any) => (
+                          <li style={{ marginBottom: '2px' }} {...props}>
+                            {children}
+                          </li>
+                        ),
+                        // Style blockquotes
+                        blockquote: ({ children, ...props }: any) => (
+                          <blockquote
+                            style={{
+                              borderLeft: '2px solid #444',
+                              paddingLeft: '8px',
+                              margin: '4px 0',
+                              color: '#aaa',
+                            }}
+                            {...props}
+                          >
+                            {children}
+                          </blockquote>
                         ),
                       }}
                     >
@@ -449,102 +623,113 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: '8px',
+                gap: '4px',
                 color: '#666',
-                fontSize: '13px',
+                fontSize: '8px',
+                padding: '0',
+                marginTop: '-4px',
               }}
             >
-              <span style={{ fontSize: '16px' }}>🤖</span>
-              <span>Thinking...</span>
-              <div
-                style={{
-                  display: 'flex',
-                  gap: '4px',
-                }}
-              >
-                <span className="dot-pulse">●</span>
-                <span className="dot-pulse" style={{ animationDelay: '0.2s' }}>
-                  ●
-                </span>
-                <span className="dot-pulse" style={{ animationDelay: '0.4s' }}>
-                  ●
-                </span>
-              </div>
+              <span className="dot-pulse">●</span>
+              <span className="dot-pulse" style={{ animationDelay: '0.2s' }}>
+                ●
+              </span>
+              <span className="dot-pulse" style={{ animationDelay: '0.4s' }}>
+                ●
+              </span>
             </div>
           )}
 
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Input Area */}
-        <form
-          onSubmit={handleSubmit}
-          style={{
-            padding: '16px',
-            borderTop: '1px solid #1a1a1a',
-            background: '#0a0a0a',
-          }}
-        >
-          <div
+        {/* Input Area - Show at bottom when messages exist */}
+        {messages.length > 0 && (
+          <form
+            onSubmit={handleSubmit}
             style={{
-              display: 'flex',
-              gap: '8px',
-              alignItems: 'flex-end',
+              padding: '16px',
+              borderTop: '1px solid #1a1a1a',
+              background: '#0a0a0a',
             }}
           >
-            <textarea
-              ref={inputRef}
-              value={currentQuestion}
-              onChange={e => onQuestionChange(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Ask about the selected text..."
-              disabled={isLoading}
+            <div
               style={{
-                flex: 1,
-                background: '#1a1a1a',
-                border: '1px solid #333',
-                borderRadius: '8px',
-                padding: '10px 12px',
-                color: '#fff',
-                fontSize: '13px',
-                fontFamily: 'inherit',
-                resize: 'none',
-                minHeight: '44px',
-                maxHeight: '120px',
-                lineHeight: '1.4',
-              }}
-              rows={1}
-            />
-            <button
-              type="submit"
-              disabled={isLoading || !currentQuestion.trim()}
-              style={{
-                background: currentQuestion.trim() && !isLoading ? '#0a7aff' : '#333',
-                color: '#fff',
-                border: 'none',
-                borderRadius: '8px',
-                padding: '10px 16px',
-                cursor: currentQuestion.trim() && !isLoading ? 'pointer' : 'not-allowed',
-                fontSize: '13px',
-                fontWeight: '500',
-                transition: 'all 0.2s',
-                height: '44px',
+                position: 'relative',
+                display: 'flex',
+                alignItems: 'flex-end',
+                background: 'linear-gradient(180deg, #0e0e10, #0b0b0d)',
+                border: '1px solid #2a2a2a',
+                borderRadius: '10px',
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)',
               }}
             >
-              {isLoading ? '...' : '→'}
-            </button>
-          </div>
-          <div
-            style={{
-              marginTop: '8px',
-              fontSize: '11px',
-              color: '#555',
-              textAlign: 'center',
-            }}
-          >
-            Press Enter to send · Shift+Enter for new line
-          </div>
-        </form>
+              <textarea
+                ref={inputRef}
+                value={currentQuestion}
+                onChange={e => onQuestionChange(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Ask about the selected text..."
+                disabled={isLoading}
+                style={{
+                  flex: 1,
+                  background: 'transparent',
+                  border: 'none',
+                  outline: 'none',
+                  padding: '12px 14px',
+                  paddingRight: '52px',
+                  color: '#fff',
+                  fontSize: '13px',
+                  fontFamily: 'inherit',
+                  resize: 'none',
+                  minHeight: '48px',
+                  maxHeight: '120px',
+                  lineHeight: '1.4',
+                }}
+                rows={1}
+              />
+              <button
+                type="submit"
+                disabled={isLoading || !currentQuestion.trim()}
+                style={{
+                  position: 'absolute',
+                  right: '8px',
+                  bottom: '8px',
+                  background: currentQuestion.trim() && !isLoading ? '#fff' : '#2a2a2a',
+                  color: currentQuestion.trim() && !isLoading ? '#000' : '#666',
+                  border: 'none',
+                  borderRadius: '50%',
+                  padding: 0,
+                  cursor: currentQuestion.trim() && !isLoading ? 'pointer' : 'not-allowed',
+                  transition: 'all 0.15s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '26px',
+                  height: '26px',
+                  boxShadow:
+                    currentQuestion.trim() && !isLoading
+                      ? '0 2px 8px rgba(255,255,255,0.2)'
+                      : 'none',
+                }}
+                title={isLoading ? 'Sending...' : 'Send message'}
+                aria-label="Send message"
+              >
+                {isLoading ? '...' : <IconArrowUp size={14} />}
+              </button>
+            </div>
+            <div
+              style={{
+                marginTop: '8px',
+                fontSize: '11px',
+                color: '#555',
+                textAlign: 'center',
+              }}
+            >
+              Press Enter to send · Shift+Enter for new line
+            </div>
+          </form>
+        )}
       </div>
 
       {/* Animation Styles */}

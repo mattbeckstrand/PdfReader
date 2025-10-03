@@ -1,6 +1,7 @@
 import type { PDFPageProxy } from 'pdfjs-dist/legacy/build/pdf';
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { captureCanvasRegion } from '../lib/utils';
 import type { BoundingBox, RegionSelection } from '../types';
 
 // ===================================================================
@@ -412,7 +413,8 @@ const PdfPage: React.FC<PdfPageProps> = ({
           setSelectionBox({ x: startX, y: startY, width: 0, height: 0 });
         }}
         onMouseMove={e => {
-          if (!isDraggingRef.current || !selectionOverlayRef.current || !dragStartRef.current) return;
+          if (!isDraggingRef.current || !selectionOverlayRef.current || !dragStartRef.current)
+            return;
           const rect = selectionOverlayRef.current.getBoundingClientRect();
           const currentX = e.clientX - rect.left;
           const currentY = e.clientY - rect.top;
@@ -425,13 +427,14 @@ const PdfPage: React.FC<PdfPageProps> = ({
           setSelectionBox({ x, y, width, height });
         }}
         onMouseUp={() => {
-          if (!isDraggingRef.current || !selectionOverlayRef.current || !dragStartRef.current) return;
+          if (!isDraggingRef.current || !selectionOverlayRef.current || !dragStartRef.current)
+            return;
           isDraggingRef.current = false;
           const box = selectionBox;
           setTimeout(() => setSelectionBox(null), 0);
           dragStartRef.current = null;
 
-          if (box && scaleFactor && onRegionSelected) {
+          if (box && scaleFactor && onRegionSelected && canvasRef.current) {
             const cssBox = { ...box, x2: box.x + box.width, y2: box.y + box.height };
             const inv = 1 / scaleFactor;
             const pdfBox = {
@@ -442,13 +445,29 @@ const PdfPage: React.FC<PdfPageProps> = ({
               x2: (box.x + box.width) * inv,
               y2: (box.y + box.height) * inv,
             };
+
+            // Capture screenshot of the selected region for multimodal AI
+            const imageBase64 = captureCanvasRegion(
+              canvasRef.current,
+              box,
+              window.devicePixelRatio || 1
+            );
+
             const selection: RegionSelection = {
               pageNumber,
               css: cssBox,
               pdf: pdfBox,
               scaleFactor,
               timestamp: Date.now(),
+              imageBase64: imageBase64 || undefined,
             };
+
+            if (imageBase64) {
+              console.log(
+                `📸 Captured screenshot for AI: ${Math.round(imageBase64.length / 1024)}KB`
+              );
+            }
+
             onRegionSelected(selection);
           }
         }}

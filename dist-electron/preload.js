@@ -11,7 +11,21 @@ const electronAPI = {
         getPage: (documentId, pageNumber) => electron_1.ipcRenderer.invoke('pdf:get-page', { documentId, pageNumber }),
     },
     ai: {
-        ask: (question, context, pageNumber) => electron_1.ipcRenderer.invoke('ai:ask', { question, context, pageNumber }),
+        ask: (question, context, pageNumber, imageBase64, conversationHistory) => electron_1.ipcRenderer.invoke('ai:ask', {
+            question,
+            context,
+            pageNumber,
+            imageBase64,
+            conversationHistory,
+        }),
+        onStreamChunk: (callback) => {
+            const listener = (_event, data) => callback(data);
+            electron_1.ipcRenderer.on('ai:stream-chunk', listener);
+            // Return cleanup function
+            return () => {
+                electron_1.ipcRenderer.removeListener('ai:stream-chunk', listener);
+            };
+        },
         embed: (text) => electron_1.ipcRenderer.invoke('ai:embed', text),
         search: (documentId, query, topK = 5) => electron_1.ipcRenderer.invoke('ai:search', { documentId, query, topK }),
     },

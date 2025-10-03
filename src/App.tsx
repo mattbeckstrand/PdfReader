@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChatMessage, ChatSidebar } from './components/ChatSidebar';
 import PdfViewer from './components/PdfViewer';
 import { useContextualChunks } from './features/contextual-chunking/useContextualChunks';
@@ -70,12 +70,87 @@ const App: React.FC = () => {
   const [asking, setAsking] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
+  // Streaming state using refs to persist across renders
+  const streamStateRef = useRef({
+    textBuffer: '',
+    displayedText: '',
+    isDone: false,
+    currentRequestId: '',
+  });
+
+  // Set up streaming listener with smooth character-by-character rendering
+  useEffect(() => {
+    let intervalId: NodeJS.Timeout | null = null;
+
+    const displayNextChars = () => {
+      const state = streamStateRef.current;
+      const remainingChars = state.textBuffer.length - state.displayedText.length;
+      const charsToAdd = Math.min(3, remainingChars);
+
+      if (charsToAdd > 0) {
+        state.displayedText = state.textBuffer.slice(0, state.displayedText.length + charsToAdd);
+
+        setMessages(prev => {
+          const newMessages = [...prev];
+          const lastMessage = newMessages[newMessages.length - 1];
+
+          if (lastMessage && lastMessage.role === 'assistant') {
+            return [...newMessages.slice(0, -1), { ...lastMessage, content: state.displayedText }];
+          }
+
+          return newMessages;
+        });
+      } else if (state.isDone && state.displayedText.length >= state.textBuffer.length) {
+        // All text displayed and streaming is done
+        setAsking(false);
+        if (intervalId) {
+          clearInterval(intervalId);
+          intervalId = null;
+        }
+      }
+    };
+
+    // Display characters every 30ms for smooth typewriter effect
+    intervalId = setInterval(displayNextChars, 30);
+
+    const cleanup = window.electronAPI.ai.onStreamChunk(data => {
+      const state = streamStateRef.current;
+
+      // If this is a new request, reset the state
+      if (data.requestId !== state.currentRequestId) {
+        state.textBuffer = '';
+        state.displayedText = '';
+        state.isDone = false;
+        state.currentRequestId = data.requestId;
+      }
+
+      if (data.done) {
+        state.isDone = true;
+      } else if (data.chunk) {
+        state.textBuffer += data.chunk;
+      }
+    });
+
+    return () => {
+      cleanup();
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, []);
+
   const handleAsk = useCallback(async () => {
     console.log('🤔 [ASK] Sending message');
     if (!question.trim()) {
       console.warn('⚠️ [ASK] No question entered');
       return;
     }
+
+    // Capture conversation history BEFORE adding new messages
+    // Get last 4 Q&A pairs (8 messages max)
+    const conversationHistory = messages.slice(-8).map(msg => ({
+      role: msg.role,
+      content: msg.content,
+      pageNumber: msg.pageNumber,
+    }));
 
     // Add user message
     const userMessage: ChatMessage = {
@@ -86,6 +161,16 @@ const App: React.FC = () => {
       pageNumber: lastSelection?.pageNumber,
     };
     setMessages(prev => [...prev, userMessage]);
+
+    // Add empty assistant message that will be filled by streaming
+    const assistantMessage: ChatMessage = {
+      id: `assistant-${Date.now()}`,
+      role: 'assistant',
+      content: '',
+      timestamp: Date.now(),
+      pageNumber: lastSelection?.pageNumber,
+    };
+    setMessages(prev => [...prev, assistantMessage]);
 
     // Clear input and start loading
     const currentQuestion = question;
@@ -106,36 +191,29 @@ const App: React.FC = () => {
         question: currentQuestion,
         contextCount: contextStrings.length,
         pageNumber: lastSelection?.pageNumber,
+        historyLength: conversationHistory.length,
       });
 
       const res = await window.electronAPI.ai.ask(
         currentQuestion,
         contextStrings,
-        lastSelection?.pageNumber
+        lastSelection?.pageNumber,
+        lastSelection?.imageBase64, // Pass screenshot for multimodal AI
+        conversationHistory // Pass conversation history
       );
 
-      console.log('✅ [ASK] AI Response received:', res);
-
-      // Add assistant message
-      const assistantMessage: ChatMessage = {
-        id: `assistant-${Date.now()}`,
-        role: 'assistant',
-        content: res?.answer || 'No response received',
-        timestamp: Date.now(),
-        pageNumber: lastSelection?.pageNumber,
-      };
-      setMessages(prev => [...prev, assistantMessage]);
+      console.log('✅ [ASK] Streaming started with requestId:', res.requestId);
     } catch (e: any) {
       console.error('❌ [ASK] Error:', e);
-      // Add error message
-      const errorMessage: ChatMessage = {
-        id: `error-${Date.now()}`,
-        role: 'assistant',
-        content: `Error: ${e?.message || 'Failed to get answer'}`,
-        timestamp: Date.now(),
-      };
-      setMessages(prev => [...prev, errorMessage]);
-    } finally {
+      // Update the last assistant message with error
+      setMessages(prev => {
+        const newMessages = [...prev];
+        const lastMessage = newMessages[newMessages.length - 1];
+        if (lastMessage && lastMessage.role === 'assistant') {
+          lastMessage.content = `Error: ${e?.message || 'Failed to get answer'}`;
+        }
+        return newMessages;
+      });
       setAsking(false);
     }
   }, [question, extractResult.text, extractResult.latex, selectionContext, lastSelection]);
