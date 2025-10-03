@@ -1,0 +1,368 @@
+:root {
+  /* Brand palette (neutralized to grayscale) */
+  --celadon: #bdbdbd; /* light accent → light gray */
+  --cambridge-blue: #9a9a9a; /* mid accent → medium gray */
+  --cambridge-blue-2: #7a7a7a; /* deep accent → darker gray */
+  --hunter-green: #1a1a1a; /* base tone → neutral dark */
+  --eerie-black: #0a0a0a; /* page background → near-black */
+
+  /* Colors */
+  --bg: #0a0a0a;
+  /* Neutral grayscale surfaces and strokes */
+  --surface-1: #111111;
+  --surface-2: #161616;
+  --surface-3: #0d0d0d;
+  --stroke-1: #222222;
+  --stroke-2: #2a2a2a;
+  --text-1: #e7e9ea;
+  --text-2: #a3a8ae;
+  --text-muted: #8b9096;
+  /* Accent uses celadon with deeper cambridge tone for hover */
+  --accent: var(--celadon);
+  --accent-2: var(--cambridge-blue-2);
+
+  /* Radii */
+  --radius-lg: 14px;
+  --radius-md: 10px;
+  --radius-sm: 8px;
+
+  /* Shadows */
+  --shadow-1: 0 8px 30px rgba(0, 0, 0, 0.45);
+  --shadow-2: 0 14px 40px rgba(0, 0, 0, 0.55);
+
+  /* Motion */
+  --ease-snap: cubic-bezier(0.22, 1, 0.36, 1);
+  --transition-fast: 150ms var(--ease-snap);
+  --transition: 220ms var(--ease-snap);
+
+  /* Rings */
+  --ring: 0 0 0 2px color-mix(in oklab, var(--accent) 45%, transparent);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+/* Base dark background similar to ChatGPT */
+body {
+  background: var(--bg);
+  color: var(--text-1);
+}
+
+.surface {
+  background: var(--surface-1);
+  border: 1px solid var(--stroke-1);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-1);
+}
+
+.text-muted {
+  color: var(--text-2);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--stroke-1);
+  padding: 13px 18px;
+  font-weight: 600;
+  color: var(--text-1);
+  background: var(--surface-2);
+  cursor: pointer;
+  transition: transform var(--transition), box-shadow var(--transition),
+    background var(--transition);
+}
+.btn:hover {
+  transform: translateY(-1px);
+  background: var(--surface-3);
+}
+.btn:active {
+  transform: translateY(0);
+}
+.btn:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #c9c9c9, #a6a6a6);
+  color: #0a0a0a;
+  border-color: color-mix(in oklab, var(--accent) 60%, var(--stroke-1));
+}
+.btn-primary:hover {
+  background: linear-gradient(135deg, #d6d6d6, #b0b0b0);
+}
+
+.textfield {
+  position: relative;
+}
+.textfield input {
+  width: 100%;
+  padding: 14px 16px 14px 44px;
+  background: var(--surface-2);
+  color: var(--text-1);
+  border: 1px solid var(--stroke-1);
+  border-radius: var(--radius-md);
+  outline: none;
+  transition: border-color var(--transition), box-shadow var(--transition),
+    background var(--transition);
+}
+.textfield input::placeholder {
+  color: var(--text-muted);
+}
+.textfield input:focus {
+  border-color: var(--stroke-2);
+  background: var(--surface-3);
+  box-shadow: var(--ring);
+}
+.textfield .icon {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+}
+
+.segmented {
+  display: flex;
+  gap: 6px;
+  padding: 6px;
+  border: 1px solid var(--stroke-1);
+  background: var(--surface-2);
+  border-radius: var(--radius-md);
+}
+.segmented button {
+  border: 0;
+  background: transparent;
+  color: var(--text-2);
+  padding: 10px 14px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background var(--transition), color var(--transition);
+}
+.segmented button[aria-pressed='true'] {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-1);
+}
+.segmented button:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+/* Library specific layout shells */
+.library-bg {
+  position: relative;
+  min-height: 100vh;
+  overflow: auto;
+}
+.library-bg::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 420px;
+  background: radial-gradient(1400px 420px at 50% 0, rgba(255, 255, 255, 0.12), transparent 70%);
+}
+.library-container {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 100px 48px 80px 48px;
+  position: relative;
+}
+.library-header h1 {
+  font-size: 56px;
+  margin: 0 0 12px 0;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  background: linear-gradient(135deg, #fff, #cfd3d6);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.library-header p {
+  margin: 0;
+  color: var(--text-2);
+}
+
+.toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 28px;
+  align-items: center;
+}
+.toolbar-left {
+  min-width: 0; /* allow the search to shrink instead of overflow */
+}
+.toolbar-right {
+  display: flex;
+  gap: 12px;
+  justify-self: end;
+}
+
+.doc-grid {
+  display: grid;
+  gap: 24px;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+}
+.recent-row {
+  display: grid;
+  gap: 24px;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(260px, 320px);
+  overflow: auto;
+  padding-bottom: 4px;
+  scroll-snap-type: x mandatory;
+  justify-content: start;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--stroke-1);
+  background: linear-gradient(180deg, var(--surface-2), var(--surface-1));
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  cursor: pointer;
+  transition: transform var(--transition), border-color var(--transition),
+    box-shadow var(--transition);
+}
+.card:hover {
+  transform: translateY(-3px);
+  border-color: var(--stroke-2);
+  box-shadow: var(--shadow-2);
+}
+.card-thumb {
+  width: 100%;
+  height: 280px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02));
+  border-bottom: 1px solid var(--stroke-1);
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.card-thumb.recent {
+  height: 200px;
+}
+/* Monogram initials inside card-thumb */
+.thumb-initials {
+  color: rgba(255, 255, 255, 0.14);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  user-select: none;
+}
+
+/* Small chips inside corners of the thumb */
+.thumb-chip {
+  position: absolute;
+  font-size: 11px;
+  color: var(--text-2);
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--stroke-1);
+  border-radius: 999px;
+  padding: 6px 8px;
+  backdrop-filter: blur(6px);
+}
+.thumb-chip--tl {
+  top: 10px;
+  left: 10px;
+}
+.thumb-chip--bl {
+  bottom: 10px;
+  left: 10px;
+}
+.card-info {
+  padding: 18px;
+}
+.card-title {
+  margin: 0 0 6px 0;
+  color: var(--text-1);
+  font-weight: 600;
+  font-size: 16px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.card-author {
+  margin: 0 0 12px 0;
+  color: var(--text-2);
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.card-meta {
+  display: flex;
+  gap: 12px;
+  color: var(--text-2);
+  font-size: 12px;
+  align-items: center;
+}
+.card-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: rgba(0, 0, 0, 0.35);
+}
+.card-progress > div {
+  height: 100%;
+  background: linear-gradient(90deg, #d0d0d0, #a0a0a0);
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 120px 20px;
+  text-align: center;
+}
+.empty .circle {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: var(--surface-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 24px;
+  border: 1px dashed var(--stroke-1);
+}
+.empty h3 {
+  margin: 0 0 10px 0;
+  color: var(--text-1);
+}
+.empty p {
+  margin: 0 0 24px 0;
+  color: var(--text-2);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn,
+  .card {
+    transition: none;
+  }
+}
+
+/* Responsive stacking: move controls below search on smaller widths */
+@media (max-width: 1024px) {
+  .toolbar {
+    grid-template-columns: 1fr;
+  }
+  .toolbar-right {
+    justify-self: start;
+  }
+}
+
+/* CTA row next to Import button */
+.cta-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
