@@ -135,6 +135,7 @@ export function usePdfDocument(): UsePdfDocumentResult {
    */
   const loadPdf = useCallback(
     async (file: File, filePathToStore?: string) => {
+      console.log('🚀 [LOAD PDF] Called with:', { fileName: file.name, filePathToStore });
       console.log('📂 Loading PDF file:', {
         name: file.name,
         size: file.size,
@@ -218,7 +219,7 @@ export function usePdfDocument(): UsePdfDocumentResult {
         // Create our document object
         const pdfDocument: PdfDocument = {
           id: crypto.randomUUID(),
-          filePath: file.name,
+          filePath: filePathToStore || file.name,
           title: info?.Title || file.name,
           numPages: pdfDoc.numPages,
           metadata: {
@@ -250,6 +251,12 @@ export function usePdfDocument(): UsePdfDocumentResult {
         if (filePathToStore) {
           console.log('💾 Storing PDF path for persistence:', filePathToStore);
           localStorage.setItem('lastPdfPath', filePathToStore);
+          console.log(
+            '✅ Stored in localStorage. Verification:',
+            localStorage.getItem('lastPdfPath')
+          );
+        } else {
+          console.warn('⚠️ No filePathToStore provided, path NOT stored in localStorage');
         }
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : ERROR_MESSAGES.PDF_LOAD_FAILED;
@@ -282,13 +289,16 @@ export function usePdfDocument(): UsePdfDocumentResult {
         return;
       }
 
+      console.log('🔍 [AUTO-RELOAD] Checking for stored PDF path...');
       const storedPath = localStorage.getItem('lastPdfPath');
+      console.log('🔍 [AUTO-RELOAD] Stored path from localStorage:', storedPath);
+
       if (!storedPath) {
-        console.log('ℹ️ No stored PDF path found');
+        console.log('ℹ️ [AUTO-RELOAD] No stored PDF path found');
         return;
       }
 
-      console.log('🔄 Attempting to reload last PDF:', storedPath);
+      console.log('🔄 [AUTO-RELOAD] Attempting to reload last PDF:', storedPath);
       setLoading(true);
 
       try {
@@ -308,14 +318,19 @@ export function usePdfDocument(): UsePdfDocumentResult {
         const blob = new Blob([result.data], { type: 'application/pdf' });
         const file = new File([blob], result.name, { type: 'application/pdf' });
 
-        console.log('✅ Reloaded PDF file from storage:', {
+        console.log('✅ [AUTO-RELOAD] Reloaded PDF file from storage:', {
           name: result.name,
           size: result.data.length,
           path: storedPath,
         });
 
-        // Load the PDF (don't pass filePathToStore since it's already stored)
-        await loadPdf(file);
+        // Load the PDF and re-store the path to ensure it's available for extraction
+        console.log('🔄 [AUTO-RELOAD] Calling loadPdf with storedPath:', storedPath);
+        await loadPdf(file, storedPath);
+        console.log(
+          '✅ [AUTO-RELOAD] loadPdf completed. Verifying localStorage:',
+          localStorage.getItem('lastPdfPath')
+        );
       } catch (err) {
         console.error('❌ Failed to reload stored PDF:', err);
         setError('Could not reload previous PDF');
