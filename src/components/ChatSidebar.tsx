@@ -392,6 +392,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
             overflowY: 'auto',
             padding: '16px',
             paddingTop: '48px',
+            paddingBottom: '100px',
             display: 'flex',
             flexDirection: 'column',
             gap: '6px',
@@ -707,9 +708,14 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
         <form
           onSubmit={handleSubmit}
           style={{
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            right: 0,
             padding: '16px',
             paddingTop: '12px',
             background: '#0a0a0a',
+            borderTop: '1px solid rgba(255, 255, 255, 0.05)',
           }}
         >
           <div
