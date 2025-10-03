@@ -34,6 +34,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
   onOpenDocument,
   onAddDocument,
 }) => {
+  const theme = document.documentElement.getAttribute('data-theme') || 'dark';
   // ===================================================================
   // Helpers (pure, typed)
   // ===================================================================
@@ -48,16 +49,27 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
     return letters.join('').slice(0, 3);
   }, []);
 
-  const getThumbGradient = useCallback((seed: string): string => {
-    // Deterministic but grayscale: map seed to two lightness levels
-    let hash = 0;
-    for (let i = 0; i < seed.length; i++) {
-      hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
-    }
-    const l1 = 18 + (hash % 6); // 18% - 23%
-    const l2 = 12 + ((hash >> 3) % 6); // 12% - 17%
-    return `linear-gradient(135deg, hsl(0 0% ${l1}% / 1), hsl(0 0% ${l2}% / 1))`;
-  }, []);
+  const getThumbGradient = useCallback(
+    (seed: string): string => {
+      // Deterministic but grayscale: map seed to two lightness levels
+      let hash = 0;
+      for (let i = 0; i < seed.length; i++) {
+        hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
+      }
+
+      // Light mode: lighter gradients (85%-95%), Dark mode: darker gradients (12%-23%)
+      if (theme === 'light') {
+        const l1 = 88 + (hash % 7); // 88% - 94%
+        const l2 = 80 + ((hash >> 3) % 8); // 80% - 87%
+        return `linear-gradient(135deg, hsl(0 0% ${l1}% / 1), hsl(0 0% ${l2}% / 1))`;
+      } else {
+        const l1 = 18 + (hash % 6); // 18% - 23%
+        const l2 = 12 + ((hash >> 3) % 6); // 12% - 17%
+        return `linear-gradient(135deg, hsl(0 0% ${l1}% / 1), hsl(0 0% ${l2}% / 1))`;
+      }
+    },
+    [theme]
+  );
   // ===================================================================
   // State
   // ===================================================================
@@ -134,7 +146,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
   // Render Helpers
   // ===================================================================
 
-  const renderDocumentCard = (doc: LibraryDocument, isRecent: boolean = false) => {
+  const renderDocumentCard = (doc: LibraryDocument) => {
     const progressPercent = Math.round(doc.readingProgress * 100);
     const thumbBg = getThumbGradient(doc.title);
     const initials = getInitials(doc.title);
@@ -148,7 +160,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
       >
         {/* Thumbnail */}
         <div
-          className={`card-thumb ${isRecent ? 'recent' : ''}`}
+          className="card-thumb"
           style={{
             background: doc.thumbnail
               ? `url(${doc.thumbnail}) center / contain no-repeat`
@@ -159,7 +171,10 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
             <div
               className="thumb-initials"
               aria-hidden
-              style={{ fontSize: isRecent ? '44px' : '60px' }}
+              style={{
+                fontSize: '60px',
+                color: theme === 'light' ? 'rgba(0, 0, 0, 0.08)' : 'rgba(255, 255, 255, 0.14)',
+              }}
             >
               {initials}
             </div>
@@ -189,13 +204,9 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
         </div>
 
         {/* Info Section */}
-        <div className="card-info" style={{ padding: isRecent ? '16px' : undefined }}>
+        <div className="card-info">
           {/* Title */}
-          <h3
-            className="card-title"
-            style={{ fontSize: isRecent ? '15px' : undefined }}
-            title={doc.title}
-          >
+          <h3 className="card-title" title={doc.title}>
             {doc.title}
           </h3>
 
@@ -330,9 +341,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
               <Clock size={18} />
               <h2>Recently Opened</h2>
             </div>
-            <div className="recent-row" style={{ maxWidth: '100%', overflowX: 'auto' }}>
-              {recentDocuments.map(doc => renderDocumentCard(doc, true))}
-            </div>
+            <div className="recent-row">{recentDocuments.map(doc => renderDocumentCard(doc))}</div>
           </div>
         )}
 
@@ -369,7 +378,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                 gap: viewMode === 'grid' ? undefined : '16px',
               }}
             >
-              {filteredDocuments.map(doc => renderDocumentCard(doc, false))}
+              {filteredDocuments.map(doc => renderDocumentCard(doc))}
             </div>
           )}
         </div>

@@ -1,14 +1,29 @@
 :root {
+  /* Radii */
+  --radius-lg: 14px;
+  --radius-md: 10px;
+  --radius-sm: 8px;
+
+  /* Motion */
+  --ease-snap: cubic-bezier(0.22, 1, 0.36, 1);
+  --transition-fast: 150ms var(--ease-snap);
+  --transition: 220ms var(--ease-snap);
+}
+
+/* ===================================================================
+   DARK THEME (Default)
+   ================================================================ */
+:root,
+:root[data-theme='dark'] {
   /* Brand palette (neutralized to grayscale) */
-  --celadon: #bdbdbd; /* light accent → light gray */
-  --cambridge-blue: #9a9a9a; /* mid accent → medium gray */
-  --cambridge-blue-2: #7a7a7a; /* deep accent → darker gray */
-  --hunter-green: #1a1a1a; /* base tone → neutral dark */
-  --eerie-black: #0a0a0a; /* page background → near-black */
+  --celadon: #bdbdbd;
+  --cambridge-blue: #9a9a9a;
+  --cambridge-blue-2: #7a7a7a;
+  --hunter-green: #1a1a1a;
+  --eerie-black: #0a0a0a;
 
   /* Colors */
   --bg: #0a0a0a;
-  /* Neutral grayscale surfaces and strokes */
   --surface-1: #111111;
   --surface-2: #161616;
   --surface-3: #0d0d0d;
@@ -17,26 +32,67 @@
   --text-1: #e7e9ea;
   --text-2: #a3a8ae;
   --text-muted: #8b9096;
-  /* Accent uses celadon with deeper cambridge tone for hover */
   --accent: var(--celadon);
   --accent-2: var(--cambridge-blue-2);
-
-  /* Radii */
-  --radius-lg: 14px;
-  --radius-md: 10px;
-  --radius-sm: 8px;
+  --accent-bg: rgba(189, 189, 189, 0.1);
 
   /* Shadows */
   --shadow-1: 0 8px 30px rgba(0, 0, 0, 0.45);
   --shadow-2: 0 14px 40px rgba(0, 0, 0, 0.55);
 
-  /* Motion */
-  --ease-snap: cubic-bezier(0.22, 1, 0.36, 1);
-  --transition-fast: 150ms var(--ease-snap);
-  --transition: 220ms var(--ease-snap);
-
   /* Rings */
   --ring: 0 0 0 2px color-mix(in oklab, var(--accent) 45%, transparent);
+
+  /* Gradient overlay for library background - removed for uniform background */
+  --library-gradient: transparent;
+  --header-gradient: linear-gradient(135deg, #fff, #cfd3d6);
+
+  /* Navigation button states */
+  --nav-active-bg: rgba(255, 255, 255, 0.08);
+  --nav-hover-bg: rgba(255, 255, 255, 0.06);
+  --nav-disabled-text: rgba(255, 255, 255, 0.25);
+}
+
+/* ===================================================================
+   LIGHT THEME (Claude-inspired: Warm tan + Blue accents)
+   ================================================================ */
+:root[data-theme='light'] {
+  /* Brand palette for light mode */
+  --celadon: #4a7ba7;
+  --cambridge-blue: #5b8bb8;
+  --cambridge-blue-2: #3d6a91;
+  --hunter-green: #ebe5df;
+  --eerie-black: #f7f4f0;
+
+  /* Colors - Claude-inspired warm tan palette with blue accents */
+  --bg: #f5f1ec;
+  --surface-1: #faf8f5;
+  --surface-2: #f7f4f0;
+  --surface-3: #ebe5df;
+  --stroke-1: #e3ddd5;
+  --stroke-2: #d4cec6;
+  --text-1: #2c2a27;
+  --text-2: #5f5b56;
+  --text-muted: #8a8680;
+  --accent: #4a7ba7;
+  --accent-2: #3d6a91;
+  --accent-bg: rgba(74, 123, 167, 0.1);
+
+  /* Shadows - softer for light mode with warm tint */
+  --shadow-1: 0 2px 8px rgba(60, 50, 40, 0.06), 0 1px 3px rgba(60, 50, 40, 0.08);
+  --shadow-2: 0 8px 24px rgba(60, 50, 40, 0.12), 0 4px 8px rgba(60, 50, 40, 0.08);
+
+  /* Rings - blue accent */
+  --ring: 0 0 0 2px rgba(74, 123, 167, 0.25);
+
+  /* Gradient overlay for library background - removed for uniform tan background */
+  --library-gradient: transparent;
+  --header-gradient: linear-gradient(135deg, #2c2a27, #4a4540);
+
+  /* Navigation button states - light mode */
+  --nav-active-bg: rgba(74, 123, 167, 0.12);
+  --nav-hover-bg: rgba(74, 123, 167, 0.08);
+  --nav-disabled-text: rgba(0, 0, 0, 0.25);
 }
 
 html,
@@ -88,13 +144,27 @@ body {
   box-shadow: var(--ring);
 }
 
-.btn-primary {
+/* Primary button - theme-aware styling */
+:root .btn-primary,
+:root[data-theme='dark'] .btn-primary {
   background: linear-gradient(135deg, #c9c9c9, #a6a6a6);
   color: #0a0a0a;
   border-color: color-mix(in oklab, var(--accent) 60%, var(--stroke-1));
 }
-.btn-primary:hover {
+:root .btn-primary:hover,
+:root[data-theme='dark'] .btn-primary:hover {
   background: linear-gradient(135deg, #d6d6d6, #b0b0b0);
+}
+
+:root[data-theme='light'] .btn-primary {
+  background: linear-gradient(135deg, #5b8bb8, #4a7ba7);
+  color: #ffffff;
+  border-color: #4a7ba7;
+  box-shadow: 0 1px 3px rgba(74, 123, 167, 0.15);
+}
+:root[data-theme='light'] .btn-primary:hover {
+  background: linear-gradient(135deg, #6b9bc8, #5b8bb8);
+  box-shadow: 0 2px 6px rgba(74, 123, 167, 0.25);
 }
 
 .textfield {
@@ -165,7 +235,7 @@ body {
   position: absolute;
   inset: 0 0 auto 0;
   height: 420px;
-  background: radial-gradient(1400px 420px at 50% 0, rgba(255, 255, 255, 0.12), transparent 70%);
+  background: var(--library-gradient);
 }
 .library-container {
   max-width: 1440px;
@@ -178,7 +248,7 @@ body {
   margin: 0 0 12px 0;
   font-weight: 700;
   letter-spacing: -0.03em;
-  background: linear-gradient(135deg, #fff, #cfd3d6);
+  background: var(--header-gradient);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -211,12 +281,7 @@ body {
 .recent-row {
   display: grid;
   gap: 24px;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(260px, 320px);
-  overflow: auto;
-  padding-bottom: 4px;
-  scroll-snap-type: x mandatory;
-  justify-content: start;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
 }
 
 .card {
@@ -244,9 +309,6 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-}
-.card-thumb.recent {
-  height: 200px;
 }
 /* Monogram initials inside card-thumb */
 .thumb-initials {
@@ -308,11 +370,26 @@ body {
   right: 0;
   bottom: 0;
   height: 3px;
+}
+
+/* Dark mode progress bar */
+:root .card-progress,
+:root[data-theme='dark'] .card-progress {
   background: rgba(0, 0, 0, 0.35);
 }
-.card-progress > div {
+:root .card-progress > div,
+:root[data-theme='dark'] .card-progress > div {
   height: 100%;
   background: linear-gradient(90deg, #d0d0d0, #a0a0a0);
+}
+
+/* Light mode progress bar - blue accent */
+:root[data-theme='light'] .card-progress {
+  background: rgba(74, 123, 167, 0.12);
+}
+:root[data-theme='light'] .card-progress > div {
+  height: 100%;
+  background: linear-gradient(90deg, #5b8bb8, #4a7ba7);
 }
 
 .empty {
@@ -365,4 +442,55 @@ body {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+/* Section title with icon */
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+.section-title h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+/* Favorite badge on card thumbnails */
+.fav-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--stroke-1);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Sort select dropdown */
+.sort-select {
+  padding: 10px 14px;
+  background: var(--surface-2);
+  color: var(--text-1);
+  border: 1px solid var(--stroke-1);
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color var(--transition), background var(--transition);
+}
+.sort-select:hover {
+  background: var(--surface-3);
+  border-color: var(--stroke-2);
+}
+.sort-select:focus {
+  outline: none;
+  box-shadow: var(--ring);
 }
