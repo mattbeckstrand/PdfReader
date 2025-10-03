@@ -34,6 +34,7 @@
   --text-muted: #8b9096;
   --accent: var(--celadon);
   --accent-2: var(--cambridge-blue-2);
+  --accent-bg: rgba(189, 189, 189, 0.1);
 
   /* Shadows */
   --shadow-1: 0 8px 30px rgba(0, 0, 0, 0.45);
@@ -75,6 +76,7 @@
   --text-muted: #8a8680;
   --accent: #4a7ba7;
   --accent-2: #3d6a91;
+  --accent-bg: rgba(74, 123, 167, 0.1);
 
   /* Shadows - softer for light mode with warm tint */
   --shadow-1: 0 2px 8px rgba(60, 50, 40, 0.06), 0 1px 3px rgba(60, 50, 40, 0.08);
@@ -279,12 +281,7 @@ body {
 .recent-row {
   display: grid;
   gap: 24px;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(260px, 320px);
-  overflow: auto;
-  padding-bottom: 4px;
-  scroll-snap-type: x mandatory;
-  justify-content: start;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
 }
 
 .card {
@@ -312,9 +309,6 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-}
-.card-thumb.recent {
-  height: 200px;
 }
 /* Monogram initials inside card-thumb */
 .thumb-initials {
@@ -448,4 +442,55 @@ body {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+/* Section title with icon */
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+.section-title h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+/* Favorite badge on card thumbnails */
+.fav-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--stroke-1);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Sort select dropdown */
+.sort-select {
+  padding: 10px 14px;
+  background: var(--surface-2);
+  color: var(--text-1);
+  border: 1px solid var(--stroke-1);
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color var(--transition), background var(--transition);
+}
+.sort-select:hover {
+  background: var(--surface-3);
+  border-color: var(--stroke-2);
+}
+.sort-select:focus {
+  outline: none;
+  box-shadow: var(--ring);
 }
