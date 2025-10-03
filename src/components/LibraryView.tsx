@@ -49,15 +49,14 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
   }, []);
 
   const getThumbGradient = useCallback((seed: string): string => {
-    // Simple deterministic hash → hue
+    // Deterministic but grayscale: map seed to two lightness levels
     let hash = 0;
     for (let i = 0; i < seed.length; i++) {
       hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
     }
-    const hue = hash % 360;
-    const hue2 = (hue + 20) % 360;
-    // Dark gradients to fit the theme
-    return `linear-gradient(135deg, hsl(${hue} 28% 20%), hsl(${hue2} 24% 14%))`;
+    const l1 = 18 + (hash % 6); // 18% - 23%
+    const l2 = 12 + ((hash >> 3) % 6); // 12% - 17%
+    return `linear-gradient(135deg, hsl(0 0% ${l1}% / 1), hsl(0 0% ${l2}% / 1))`;
   }, []);
   // ===================================================================
   // State
