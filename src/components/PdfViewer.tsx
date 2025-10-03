@@ -3,7 +3,9 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 // ✅ CORRECT: Import from legacy build for Electron compatibility
 import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist/legacy/build/pdf';
 
+import { Moon, PanelLeftClose, PanelLeftOpen, Sun } from 'lucide-react';
 import type { RegionSelection } from '../types';
+import { PageThumbnailSidebar } from './PageThumbnailSidebar';
 import PdfPage from './PdfPage';
 
 // ===================================================================
@@ -22,6 +24,9 @@ interface PdfViewerProps {
   onCanvasReady?: (pageNum: number, canvas: HTMLCanvasElement | null, scaleFactor?: number) => void;
   onRegionSelected?: (selection: RegionSelection) => void;
   onToggleChat?: () => void;
+  documentMenuSlot?: React.ReactNode;
+  theme?: 'light' | 'dark';
+  onThemeToggle?: () => void;
 }
 
 // ===================================================================
@@ -52,6 +57,9 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
   onCanvasReady,
   onRegionSelected,
   onToggleChat,
+  documentMenuSlot,
+  theme,
+  onThemeToggle,
 }) => {
   const MAX_PAGE_WIDTH = 900; // Keep in sync with wrapper style below
   // ===================================================================
@@ -69,6 +77,18 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
   const [pageInput, setPageInput] = useState('');
   const [containerWidth, setContainerWidth] = useState(0);
   const [visiblePages, setVisiblePages] = useState<Set<number>>(new Set());
+
+  // Sidebar state with localStorage persistence
+  const [sidebarOpen, setSidebarOpen] = useState(() => {
+    const saved = localStorage.getItem('pdfViewer.sidebarOpen');
+    return saved !== null ? JSON.parse(saved) : true; // Default to open
+  });
+
+  // Sidebar width with localStorage persistence
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    const saved = localStorage.getItem('pdfViewer.sidebarWidth');
+    return saved !== null ? parseInt(saved, 10) : 200; // Default to 200px
+  });
 
   // ===================================================================
   // Measure Container Width
@@ -95,6 +115,52 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
     window.addEventListener('resize', updateWidth);
     return () => window.removeEventListener('resize', updateWidth);
   }, [pdfDocument]);
+
+  // ===================================================================
+  // Sidebar State Persistence
+  // ===================================================================
+
+  /**
+   * Persist sidebar state to localStorage
+   */
+  useEffect(() => {
+    localStorage.setItem('pdfViewer.sidebarOpen', JSON.stringify(sidebarOpen));
+  }, [sidebarOpen]);
+
+  /**
+   * Persist sidebar width to localStorage
+   */
+  useEffect(() => {
+    localStorage.setItem('pdfViewer.sidebarWidth', sidebarWidth.toString());
+  }, [sidebarWidth]);
+
+  /**
+   * Toggle sidebar visibility
+   */
+  const handleToggleSidebar = useCallback(() => {
+    setSidebarOpen(prev => !prev);
+  }, []);
+
+  /**
+   * Handle sidebar width change
+   */
+  const handleSidebarWidthChange = useCallback((width: number) => {
+    setSidebarWidth(width);
+  }, []);
+
+  /**
+   * Handle page selection from sidebar
+   */
+  const handlePageSelect = useCallback(
+    (pageNum: number) => {
+      const pageElement = pageRefsMap.current.get(pageNum);
+      if (pageElement) {
+        pageElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+      onSetCurrentPage(pageNum);
+    },
+    [onSetCurrentPage]
+  );
 
   // ===================================================================
   // Event Handlers
@@ -335,6 +401,20 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
       className="pdf-viewer"
       style={{ width: '100%', height: '100vh', display: 'flex', flexDirection: 'column' }}
     >
+      {/* Page Thumbnail Sidebar */}
+      {pdfDocument && (
+        <PageThumbnailSidebar
+          pdfDocument={pdfDocument}
+          allPageObjects={allPageObjects}
+          currentPage={currentPage}
+          onPageSelect={handlePageSelect}
+          isOpen={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
+          width={sidebarWidth}
+          onWidthChange={handleSidebarWidthChange}
+        />
+      )}
+
       {/* ============================================================
           Header - Controls and Navigation
           ============================================================ */}
@@ -347,33 +427,46 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
           gap: '20px',
           backgroundColor: 'var(--bg)',
           flexShrink: 0,
+          // Keep header anchored to left - no margin shift
         }}
       >
-        {/* File Picker Button */}
-        <button
-          onClick={handleOpenFile}
-          className="btn"
-          style={{
-            padding: '8px 16px',
-            fontSize: '13px',
-            fontWeight: '400',
-            cursor: 'pointer',
-            border: '1px solid var(--stroke-1)',
-            borderRadius: 'var(--radius-md)',
-            backgroundColor: 'transparent',
-            color: 'var(--text-1)',
-            transition: 'all 0.15s ease',
-            letterSpacing: '0.3px',
-          }}
-          onMouseEnter={e => {
-            e.currentTarget.style.backgroundColor = 'var(--surface-3)';
-          }}
-          onMouseLeave={e => {
-            e.currentTarget.style.backgroundColor = 'transparent';
-          }}
-        >
-          Open
-        </button>
+        {/* Left side controls */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          {/* Sidebar Toggle Button (only visible when PDF is loaded) */}
+          {pdfDocument && (
+            <button
+              onClick={handleToggleSidebar}
+              className="btn"
+              style={{
+                padding: '8px 12px',
+                fontSize: '13px',
+                fontWeight: '400',
+                cursor: 'pointer',
+                border: '1px solid var(--stroke-1)',
+                borderRadius: 'var(--radius-md)',
+                backgroundColor: 'transparent',
+                color: 'var(--text-1)',
+                transition: 'all 0.15s ease',
+                letterSpacing: '0.3px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.backgroundColor = 'var(--surface-3)';
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.backgroundColor = 'transparent';
+              }}
+              title={sidebarOpen ? 'Hide pages' : 'Show pages'}
+            >
+              {sidebarOpen ? <PanelLeftClose size={16} /> : <PanelLeftOpen size={16} />}
+            </button>
+          )}
+
+          {/* Document Menu (passed from parent) */}
+          {documentMenuSlot}
+        </div>
 
         {/* Navigation Controls (only visible when PDF is loaded) */}
         {pdfDocument && (
@@ -429,46 +522,82 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
           </>
         )}
 
-        {/* Chat Toggle Button */}
-        <button
-          onClick={onToggleChat}
-          className="btn"
-          style={{
-            marginLeft: 'auto',
-            padding: '8px 12px',
-            fontSize: '13px',
-            cursor: 'pointer',
-            border: '1px solid var(--stroke-1)',
-            borderRadius: 'var(--radius-md)',
-            backgroundColor: 'transparent',
-            color: 'var(--text-1)',
-            transition: 'all 0.15s ease',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-          }}
-          onMouseEnter={e => {
-            e.currentTarget.style.backgroundColor = 'var(--surface-3)';
-          }}
-          onMouseLeave={e => {
-            e.currentTarget.style.backgroundColor = 'transparent';
-          }}
-          title="Toggle AI Chat"
-        >
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
+        {/* Right side controls */}
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '12px' }}>
+          {/* Theme Toggle Button */}
+          {theme && onThemeToggle && (
+            <button
+              onClick={onThemeToggle}
+              className="btn"
+              style={{
+                padding: '8px 12px',
+                fontSize: '13px',
+                cursor: 'pointer',
+                border: '1px solid var(--stroke-1)',
+                borderRadius: 'var(--radius-md)',
+                backgroundColor: 'transparent',
+                color: 'var(--text-1)',
+                transition: 'all 0.15s ease',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.backgroundColor = 'var(--surface-3)';
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.backgroundColor = 'transparent';
+              }}
+              title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
+            >
+              {theme === 'light' ? (
+                <Moon size={16} strokeWidth={2} />
+              ) : (
+                <Sun size={16} strokeWidth={2} />
+              )}
+            </button>
+          )}
+
+          {/* Chat Toggle Button */}
+          <button
+            onClick={onToggleChat}
+            className="btn"
+            style={{
+              padding: '8px 12px',
+              fontSize: '13px',
+              cursor: 'pointer',
+              border: '1px solid var(--stroke-1)',
+              borderRadius: 'var(--radius-md)',
+              backgroundColor: 'transparent',
+              color: 'var(--text-1)',
+              transition: 'all 0.15s ease',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.backgroundColor = 'var(--surface-3)';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.backgroundColor = 'transparent';
+            }}
+            title="Toggle AI Chat"
           >
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-          </svg>
-          Chat
-        </button>
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            </svg>
+            Chat
+          </button>
+        </div>
       </div>
 
       {/* ============================================================
@@ -484,6 +613,8 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
           display: 'flex',
           justifyContent: 'center',
           alignItems: 'flex-start',
+          marginLeft: pdfDocument && sidebarOpen ? `${sidebarWidth}px` : '0',
+          transition: 'margin-left 0.2s ease',
         }}
       >
         {/* Loading State */}

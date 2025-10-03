@@ -1,10 +1,8 @@
 import { Clock, FileText, Grid3x3, List, Plus, Search, Star } from 'lucide-react';
 import React, { useCallback, useMemo, useState } from 'react';
-import type { Theme } from '../hooks/useTheme';
 import { PrimaryButton } from '../shared/components/PrimaryButton';
 import { SegmentedControl } from '../shared/components/SegmentedControl';
 import { TextField } from '../shared/components/TextField';
-import { ThemeToggle } from '../shared/components/ThemeToggle';
 import type { LibraryDocument, LibrarySortBy, LibraryViewMode } from '../types/library';
 
 // ===================================================================
@@ -15,8 +13,6 @@ interface LibraryViewProps {
   documents: LibraryDocument[];
   onOpenDocument: (doc: LibraryDocument) => void;
   onAddDocument: () => void;
-  theme: Theme;
-  onThemeToggle: () => void;
 }
 
 // ===================================================================
@@ -37,9 +33,8 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
   documents,
   onOpenDocument,
   onAddDocument,
-  theme,
-  onThemeToggle,
 }) => {
+  const theme = document.documentElement.getAttribute('data-theme') || 'dark';
   // ===================================================================
   // Helpers (pure, typed)
   // ===================================================================
@@ -151,7 +146,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
   // Render Helpers
   // ===================================================================
 
-  const renderDocumentCard = (doc: LibraryDocument, isRecent: boolean = false) => {
+  const renderDocumentCard = (doc: LibraryDocument) => {
     const progressPercent = Math.round(doc.readingProgress * 100);
     const thumbBg = getThumbGradient(doc.title);
     const initials = getInitials(doc.title);
@@ -165,7 +160,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
       >
         {/* Thumbnail */}
         <div
-          className={`card-thumb ${isRecent ? 'recent' : ''}`}
+          className="card-thumb"
           style={{
             background: doc.thumbnail
               ? `url(${doc.thumbnail}) center / contain no-repeat`
@@ -177,7 +172,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
               className="thumb-initials"
               aria-hidden
               style={{
-                fontSize: isRecent ? '44px' : '60px',
+                fontSize: '60px',
                 color: theme === 'light' ? 'rgba(0, 0, 0, 0.08)' : 'rgba(255, 255, 255, 0.14)',
               }}
             >
@@ -209,13 +204,9 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
         </div>
 
         {/* Info Section */}
-        <div className="card-info" style={{ padding: isRecent ? '16px' : undefined }}>
+        <div className="card-info">
           {/* Title */}
-          <h3
-            className="card-title"
-            style={{ fontSize: isRecent ? '15px' : undefined }}
-            title={doc.title}
-          >
+          <h3 className="card-title" title={doc.title}>
             {doc.title}
           </h3>
 
@@ -339,7 +330,6 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                 <option value="dateAdded">Date Added</option>
                 <option value="progress">Progress</option>
               </select>
-              <ThemeToggle theme={theme} onToggle={onThemeToggle} />
             </div>
           </div>
         </div>
@@ -351,9 +341,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
               <Clock size={18} />
               <h2>Recently Opened</h2>
             </div>
-            <div className="recent-row" style={{ maxWidth: '100%', overflowX: 'auto' }}>
-              {recentDocuments.map(doc => renderDocumentCard(doc, true))}
-            </div>
+            <div className="recent-row">{recentDocuments.map(doc => renderDocumentCard(doc))}</div>
           </div>
         )}
 
@@ -390,7 +378,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                 gap: viewMode === 'grid' ? undefined : '16px',
               }}
             >
-              {filteredDocuments.map(doc => renderDocumentCard(doc, false))}
+              {filteredDocuments.map(doc => renderDocumentCard(doc))}
             </div>
           )}
         </div>
