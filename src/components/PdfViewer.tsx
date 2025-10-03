@@ -21,6 +21,7 @@ interface PdfViewerProps {
   onSetCurrentPage: (pageNum: number) => void;
   onCanvasReady?: (pageNum: number, canvas: HTMLCanvasElement | null, scaleFactor?: number) => void;
   onRegionSelected?: (selection: RegionSelection) => void;
+  onToggleChat?: () => void;
 }
 
 // ===================================================================
@@ -50,6 +51,7 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
   onSetCurrentPage,
   onCanvasReady,
   onRegionSelected,
+  onToggleChat,
 }) => {
   const MAX_PAGE_WIDTH = 900; // Keep in sync with wrapper style below
   // ===================================================================
@@ -429,6 +431,50 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
             </form>
           </>
         )}
+
+        {/* Chat Toggle Button */}
+        <button
+          onClick={onToggleChat}
+          style={{
+            marginLeft: 'auto',
+            padding: '8px 12px',
+            fontSize: '13px',
+            cursor: 'pointer',
+            border: '1px solid #333',
+            borderRadius: '10px',
+            backgroundColor: 'transparent',
+            color: '#fff',
+            transition: 'all 0.15s ease',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.backgroundColor = '#ffffff';
+            e.currentTarget.style.color = '#000';
+            e.currentTarget.style.borderColor = '#ffffff';
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.backgroundColor = 'transparent';
+            e.currentTarget.style.color = '#fff';
+            e.currentTarget.style.borderColor = '#333';
+          }}
+          title="Toggle AI Chat"
+        >
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+          </svg>
+          Chat
+        </button>
       </div>
 
       {/* ============================================================
