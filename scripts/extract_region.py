@@ -35,35 +35,87 @@ def render_region_png(pdf_path: str, page_number: int, rect: fitz.Rect, scale: f
         page = doc[page_number - 1]
         m = fitz.Matrix(scale, scale)
         pix = page.get_pixmap(matrix=m, clip=rect, alpha=False)
-        return pix.tobytes("png")
+        png_bytes = pix.tobytes("png")
+
+        # Save debug image to temp directory for inspection
+        try:
+            import tempfile
+            debug_path = os.path.join(tempfile.gettempdir(), f"pdf_ocr_debug_p{page_number}.png")
+            with open(debug_path, "wb") as f:
+                f.write(png_bytes)
+            sys.stderr.write(f"[DEBUG] Saved extraction image to: {debug_path}\n")
+        except Exception as e:
+            sys.stderr.write(f"[DEBUG] Could not save debug image: {e}\n")
+
+        return png_bytes
 
 def ocr_mathpix(png_bytes: bytes) -> Dict[str, Any]:
     app_id = os.getenv("MATHPIX_APP_ID")
     app_key = os.getenv("MATHPIX_APP_KEY")
+
+    # Debug logging
+    sys.stderr.write(f"[MATHPIX] App ID present: {bool(app_id)}\n")
+    sys.stderr.write(f"[MATHPIX] App Key present: {bool(app_key)}\n")
+
     if not app_id or not app_key:
         return {"ok": False, "error": "MathPix credentials missing"}
     try:
         import requests
         img_b64 = base64.b64encode(png_bytes).decode("ascii")
+
+        # Log image size for debugging
+        sys.stderr.write(f"[MATHPIX] PNG size: {len(png_bytes)} bytes, base64 size: {len(img_b64)} chars\n")
+
         payload = {
             "src": f"data:image/png;base64,{img_b64}",
             "formats": ["text", "latex_styled"],
             "rm_spaces": True,
         }
+
+        sys.stderr.write("[MATHPIX] Sending request to MathPix API...\n")
         r = requests.post(
             "https://api.mathpix.com/v3/text",
             json=payload,
             headers={"app_id": app_id, "app_key": app_key},
             timeout=30,
         )
+
+        sys.stderr.write(f"[MATHPIX] Response status: {r.status_code}\n")
+
         if r.status_code != 200:
-            return {"ok": False, "error": f"MathPix HTTP {r.status_code}"}
+            sys.stderr.write(f"[MATHPIX] Error response: {r.text}\n")
+            return {"ok": False, "error": f"MathPix HTTP {r.status_code}: {r.text}"}
+
         data = r.json()
+        sys.stderr.write(f"[MATHPIX] Full response data: {json.dumps(data, indent=2)}\n")
+
+        # MathPix returns text with embedded LaTeX using \( \) and \[ \] delimiters
         text = data.get("text", "")
+
+        # Try to get pure LaTeX from latex_styled blocks
         latex_blocks = data.get("latex_styled") or []
-        latex = "\n\n".join(block.get("latex", "") for block in latex_blocks)
+        latex_from_blocks = "\n\n".join(block.get("latex", "") for block in latex_blocks)
+
+        # If no latex_styled blocks, try to get from data.latex_simplified or data.latex
+        latex_direct = data.get("latex_simplified") or data.get("latex") or ""
+
+        # Use whichever LaTeX source has content
+        latex = latex_from_blocks or latex_direct
+
+        sys.stderr.write(f"[MATHPIX] Extracted text: {text}\n")
+        sys.stderr.write(f"[MATHPIX] Extracted LaTeX (from blocks): {latex_from_blocks}\n")
+        sys.stderr.write(f"[MATHPIX] Extracted LaTeX (direct): {latex_direct}\n")
+        sys.stderr.write(f"[MATHPIX] Final LaTeX: {latex}\n")
+        sys.stderr.write(f"[MATHPIX] LaTeX blocks count: {len(latex_blocks)}\n")
+
+        # If we don't have separate LaTeX but text contains LaTeX markers, use text as latex too
+        if not latex and text and ('\\(' in text or '\\[' in text or '$$' in text):
+            latex = text
+            sys.stderr.write("[MATHPIX] Using text field as LaTeX (contains LaTeX delimiters)\n")
+
         return {"ok": True, "text": text, "latex": latex, "source": "ocr-mathpix"}
     except Exception as e:
+        sys.stderr.write(f"[MATHPIX] Exception: {str(e)}\n")
         return {"ok": False, "error": str(e)}
 
 def ocr_latexocr(png_bytes: bytes) -> Dict[str, Any]:
