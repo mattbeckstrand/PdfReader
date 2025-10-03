@@ -4,7 +4,7 @@ dotenv.config();
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { spawn } from 'child_process';
-import { app, BrowserWindow, dialog, ipcMain } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import { readFile } from 'fs/promises';
 import * as path from 'path';
 import { dirname } from 'path';
@@ -399,3 +399,20 @@ ipcMain.handle(
     }
   }
 );
+
+/**
+ * Show file in system file manager (Finder on macOS, Explorer on Windows)
+ */
+ipcMain.handle('shell:show-item-in-folder', async (_event, fullPath: string) => {
+  try {
+    console.log('📂 Showing item in folder:', fullPath);
+    shell.showItemInFolder(fullPath);
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Failed to show item in folder:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to show item in folder',
+    };
+  }
+});

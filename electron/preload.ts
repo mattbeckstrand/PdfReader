@@ -55,6 +55,11 @@ interface ElectronAPI {
     openExternal: (url: string) => Promise<void>;
   };
 
+  // Shell operations
+  shell: {
+    showItemInFolder: (fullPath: string) => Promise<void>;
+  };
+
   // Extraction
   extract: {
     region: (
@@ -178,6 +183,11 @@ const electronAPI: ElectronAPI = {
   system: {
     platform: process.platform,
     openExternal: (url: string) => ipcRenderer.invoke('system:open-external', url),
+  },
+
+  shell: {
+    showItemInFolder: (fullPath: string) =>
+      ipcRenderer.invoke('shell:show-item-in-folder', fullPath),
   },
 
   extract: {
