@@ -7,7 +7,7 @@ import { Moon, PanelLeftClose, PanelLeftOpen, Sun } from 'lucide-react';
 import { useHighlights } from '../hooks/useHighlights';
 import type { RegionSelection } from '../types';
 import { HighlightColorPicker, type HighlightColor } from './HighlightColorPicker';
-import { IconChevronDown, IconHighlight, IconRotate, IconShare } from './Icons';
+import { IconHighlight, IconRotate, IconShare } from './Icons';
 import { PageThumbnailSidebar } from './PageThumbnailSidebar';
 import PdfPage from './PdfPage';
 import { ShareDropdown } from './ShareDropdown';
@@ -737,19 +737,18 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
                 onClick={() => setShareDropdownOpen(!shareDropdownOpen)}
                 className="btn"
                 style={{
-                  padding: '8px 14px',
-                  fontSize: '13px',
-                  fontWeight: '400',
+                  padding: '8px',
                   cursor: 'pointer',
                   border: '1px solid var(--stroke-1)',
                   borderRadius: 'var(--radius-md)',
                   backgroundColor: shareDropdownOpen ? 'var(--surface-3)' : 'transparent',
                   color: 'var(--text-1)',
                   transition: 'all 0.15s ease',
-                  letterSpacing: '0.3px',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '8px',
+                  justifyContent: 'center',
+                  width: '32px',
+                  height: '32px',
                 }}
                 onMouseEnter={e => {
                   if (!shareDropdownOpen) {
@@ -764,8 +763,6 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
                 title="Share PDF"
               >
                 <IconShare size={16} />
-                <span>Share</span>
-                <IconChevronDown size={14} />
               </button>
               <ShareDropdown
                 pdfPath={pdfPath}
