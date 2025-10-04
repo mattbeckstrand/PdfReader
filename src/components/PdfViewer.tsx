@@ -7,7 +7,7 @@ import { Moon, PanelLeftClose, PanelLeftOpen, Sun } from 'lucide-react';
 import { useHighlights } from '../hooks/useHighlights';
 import type { RegionSelection } from '../types';
 import { HighlightColorPicker, type HighlightColor } from './HighlightColorPicker';
-import { IconChevronDown, IconHighlight, IconShare } from './Icons';
+import { IconChevronDown, IconHighlight, IconRotate, IconShare } from './Icons';
 import { PageThumbnailSidebar } from './PageThumbnailSidebar';
 import PdfPage from './PdfPage';
 import { ShareDropdown } from './ShareDropdown';
@@ -104,6 +104,22 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
     return saved !== null ? parseFloat(saved) : 1.0; // Default to 100%
   });
 
+  // Per-page orientations with localStorage persistence
+  const [pageOrientations, setPageOrientations] = useState<Map<number, number>>(() => {
+    const saved = localStorage.getItem('pdfViewer.pageOrientations');
+    if (saved) {
+      try {
+        const data = JSON.parse(saved);
+        return new Map(
+          Object.entries(data).map(([page, orientation]) => [parseInt(page), orientation as number])
+        );
+      } catch {
+        return new Map();
+      }
+    }
+    return new Map();
+  });
+
   // Share dropdown state
   const [shareDropdownOpen, setShareDropdownOpen] = useState(false);
   const shareButtonRef = useRef<HTMLButtonElement>(null);
@@ -182,6 +198,14 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
   useEffect(() => {
     localStorage.setItem('pdfViewer.highlightColor', selectedHighlightColor);
   }, [selectedHighlightColor]);
+
+  /**
+   * Persist page orientations to localStorage
+   */
+  useEffect(() => {
+    const data = Object.fromEntries(pageOrientations);
+    localStorage.setItem('pdfViewer.pageOrientations', JSON.stringify(data));
+  }, [pageOrientations]);
 
   /**
    * Handle Escape key to exit highlight mode
@@ -316,6 +340,20 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
   const handleResetZoom = useCallback(() => {
     setZoom(1.0);
   }, []);
+
+  /**
+   * Orientation control functions
+   */
+  const handleRotateOrientation = useCallback(() => {
+    const currentOrientation = pageOrientations.get(currentPage) || 0;
+    const newOrientation = (currentOrientation + 90) % 360;
+
+    setPageOrientations(prev => {
+      const newMap = new Map(prev);
+      newMap.set(currentPage, newOrientation);
+      return newMap;
+    });
+  }, [pageOrientations, currentPage]);
 
   // ===================================================================
   // Event Handlers
@@ -632,6 +670,7 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
           onClose={() => setSidebarOpen(false)}
           width={sidebarWidth}
           onWidthChange={handleSidebarWidthChange}
+          pageOrientations={pageOrientations}
         />
       )}
 
@@ -804,7 +843,47 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
 
         {/* Navigation Controls (only visible when PDF is loaded) */}
         {pdfDocument && (
-          <>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            {/* Orientation Toggle Button */}
+            <button
+              onClick={handleRotateOrientation}
+              className="btn"
+              style={{
+                padding: '8px 12px',
+                fontSize: '13px',
+                fontWeight: '400',
+                cursor: 'pointer',
+                border: '1px solid var(--stroke-1)',
+                borderRadius: 'var(--radius-md)',
+                backgroundColor: 'transparent',
+                color: 'var(--text-1)',
+                transition: 'all 0.15s ease',
+                letterSpacing: '0.3px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.backgroundColor = 'var(--surface-3)';
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.backgroundColor = 'transparent';
+              }}
+              title={`Rotate ${(() => {
+                const currentOrientation = pageOrientations.get(currentPage) || 0;
+                return currentOrientation === 0
+                  ? '90°'
+                  : currentOrientation === 90
+                  ? '180°'
+                  : currentOrientation === 180
+                  ? '270°'
+                  : '0°';
+              })()}`}
+            >
+              <IconRotate size={16} />
+              <span>{pageOrientations.get(currentPage) || 0}°</span>
+            </button>
+
             {/* Page Number Input - Jump to page */}
             <form
               onSubmit={handlePageInputSubmit}
@@ -853,7 +932,7 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
                 / {totalPages}
               </span>
             </form>
-          </>
+          </div>
         )}
 
         {/* Right side controls */}
@@ -1139,6 +1218,7 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
                 highlightColor={selectedHighlightColor}
                 onTextHighlight={addHighlight}
                 zoom={zoom}
+                orientation={pageOrientations.get(index + 1) || 0}
               />
             ))}
           </div>

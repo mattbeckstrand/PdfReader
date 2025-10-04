@@ -14,6 +14,7 @@ interface PageThumbnailSidebarProps {
   onClose: () => void;
   width: number;
   onWidthChange: (width: number) => void;
+  pageOrientations: Map<number, number>;
 }
 
 // ===================================================================
@@ -33,6 +34,7 @@ export const PageThumbnailSidebar: React.FC<PageThumbnailSidebarProps> = ({
   onClose,
   width,
   onWidthChange,
+  pageOrientations,
 }) => {
   const [thumbnails, setThumbnails] = useState<Map<number, string>>(new Map());
   const thumbnailRefsMap = useRef<Map<number, HTMLDivElement>>(new Map());
@@ -47,45 +49,51 @@ export const PageThumbnailSidebar: React.FC<PageThumbnailSidebarProps> = ({
   /**
    * Generate thumbnail for a single page
    */
-  const generateThumbnail = useCallback(async (page: PDFPageProxy, pageNum: number) => {
-    try {
-      // Higher scale for clearer thumbnails (like Apple Preview)
-      const viewport = page.getViewport({ scale: 0.5 });
-      const canvas = document.createElement('canvas');
-      const context = canvas.getContext('2d');
+  const generateThumbnail = useCallback(
+    async (page: PDFPageProxy, pageNum: number) => {
+      try {
+        // Get orientation for this page
+        const orientation = pageOrientations.get(pageNum) || 0;
 
-      if (!context) return null;
+        // Higher scale for clearer thumbnails (like Apple Preview)
+        const viewport = page.getViewport({ scale: 0.5, rotation: orientation });
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
 
-      const dpr = window.devicePixelRatio || 1;
-      canvas.width = Math.floor(viewport.width * dpr);
-      canvas.height = Math.floor(viewport.height * dpr);
-      canvas.style.width = `${Math.floor(viewport.width)}px`;
-      canvas.style.height = `${Math.floor(viewport.height)}px`;
+        if (!context) return null;
 
-      const transform = dpr !== 1 ? [dpr, 0, 0, dpr, 0, 0] : null;
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = Math.floor(viewport.width * dpr);
+        canvas.height = Math.floor(viewport.height * dpr);
+        canvas.style.width = `${Math.floor(viewport.width)}px`;
+        canvas.style.height = `${Math.floor(viewport.height)}px`;
 
-      // High quality rendering
-      context.imageSmoothingEnabled = true;
-      context.imageSmoothingQuality = 'high';
+        const transform = dpr !== 1 ? [dpr, 0, 0, dpr, 0, 0] : null;
 
-      const renderContext: any = {
-        canvasContext: context,
-        viewport: viewport,
-      };
+        // High quality rendering
+        context.imageSmoothingEnabled = true;
+        context.imageSmoothingQuality = 'high';
 
-      if (transform) {
-        renderContext.transform = transform;
+        const renderContext: any = {
+          canvasContext: context,
+          viewport: viewport,
+        };
+
+        if (transform) {
+          renderContext.transform = transform;
+        }
+
+        await page.render(renderContext).promise;
+
+        // Higher quality JPEG for better clarity
+        return canvas.toDataURL('image/jpeg', 0.85);
+      } catch (error) {
+        console.error(`Failed to generate thumbnail for page ${pageNum}:`, error);
+        return null;
       }
-
-      await page.render(renderContext).promise;
-
-      // Higher quality JPEG for better clarity
-      return canvas.toDataURL('image/jpeg', 0.85);
-    } catch (error) {
-      console.error(`Failed to generate thumbnail for page ${pageNum}:`, error);
-      return null;
-    }
-  }, []);
+    },
+    [pageOrientations]
+  );
 
   /**
    * Generate thumbnails for all pages
@@ -112,6 +120,32 @@ export const PageThumbnailSidebar: React.FC<PageThumbnailSidebarProps> = ({
 
     generateAllThumbnails();
   }, [pdfDocument, allPageObjects, generateThumbnail]);
+
+  /**
+   * Regenerate thumbnails when orientations change
+   */
+  useEffect(() => {
+    if (pdfDocument && allPageObjects.length > 0) {
+      const generateAllThumbnails = async () => {
+        const newThumbnails = new Map<number, string>();
+
+        // Generate thumbnails in batches to avoid overwhelming the system
+        for (let i = 0; i < allPageObjects.length; i++) {
+          const pageNum = i + 1;
+          const page = allPageObjects[i];
+
+          const thumbnailData = await generateThumbnail(page, pageNum);
+          if (thumbnailData) {
+            newThumbnails.set(pageNum, thumbnailData);
+            // Update state incrementally so thumbnails appear as they're generated
+            setThumbnails(new Map(newThumbnails));
+          }
+        }
+      };
+
+      generateAllThumbnails();
+    }
+  }, [pageOrientations, pdfDocument, allPageObjects, generateThumbnail]);
 
   // ===================================================================
   // Scroll to Current Page

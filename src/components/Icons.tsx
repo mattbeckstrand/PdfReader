@@ -88,6 +88,15 @@ export const IconChevronDown = ({ size, ...rest }: IconProps) => (
   </svg>
 );
 
+export const IconRotate = ({ size, ...rest }: IconProps) => (
+  <svg {...baseProps(size)} {...rest}>
+    <path d="M15 2h4v4" />
+    <path d="M9 22H5v-4" />
+    <path d="M22 12a10 10 0 0 0-10-10" />
+    <path d="M2 12a10 10 0 0 0 10 10" />
+  </svg>
+);
+
 export default {
   IconChat,
   IconSend,
@@ -100,4 +109,5 @@ export default {
   IconShare,
   IconHighlight,
   IconChevronDown,
+  IconRotate,
 };
