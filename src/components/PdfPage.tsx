@@ -159,6 +159,9 @@ const PdfPage: React.FC<PdfPageProps> = ({
       // Store scale factor for coordinate conversion (OCR needs this)
       setScaleFactor(calculatedScale);
 
+      // Store scale factor for coordinate conversion (OCR needs this)
+      setScaleFactor(calculatedScale);
+
       // High-DPI (Retina) display support
       const dpr = window.devicePixelRatio || 1;
       const outputScale = dpr;
