@@ -50,6 +50,9 @@ const App: React.FC = () => {
     getDocumentByPath,
   } = useLibrary();
 
+  // Track indexing status to prevent duplicate indexing
+  const isIndexingRef = useRef<Set<string>>(new Set());
+
   // ===================================================================
   // State
   // ===================================================================
@@ -486,6 +489,71 @@ const App: React.FC = () => {
     }
   }, [currentDocumentId, pdfDocument, documents, updateThumbnail]);
 
+  /**
+   * Index document in ZeroEntropy when PDF is loaded
+   */
+  useEffect(() => {
+    if (currentDocumentId && pdfDocument && allPageObjects.length > 0) {
+      // Prevent duplicate indexing
+      if (isIndexingRef.current.has(currentDocumentId)) {
+        console.log('📚 [ZEROENTROPY] Document already being indexed, skipping...');
+        return;
+      }
+
+      const doc = documents.find(d => d.id === currentDocumentId);
+
+      if (doc) {
+        isIndexingRef.current.add(currentDocumentId);
+        console.log('📚 [ZEROENTROPY] Starting document indexing...');
+
+        // Extract text from all pages
+        (async () => {
+          try {
+            const pagesText: Array<{ pageNumber: number; text: string }> = [];
+
+            for (let i = 0; i < allPageObjects.length; i++) {
+              const pageObj = allPageObjects[i];
+
+              if (!pageObj) {
+                continue;
+              }
+
+              try {
+                const textContent = await pageObj.getTextContent();
+                const text = textContent.items.map((item: any) => item.str).join(' ');
+
+                pagesText.push({
+                  pageNumber: i + 1,
+                  text: text,
+                });
+              } catch (err) {
+                console.warn(`⚠️  [ZEROENTROPY] Failed to extract text from page ${i + 1}:`, err);
+              }
+            }
+
+            console.log(`✅ [ZEROENTROPY] Extracted text from ${pagesText.length} pages`);
+
+            // Send to ZeroEntropy for indexing
+            const documentTitle = doc.title || 'Untitled Document';
+
+            window.electronAPI.ai
+              .indexDocumentZE(currentDocumentId, documentTitle, pagesText)
+              .then(result => {
+                console.log(`✅ [ZEROENTROPY] Document indexed: ${result.collectionId}`);
+              })
+              .catch(err => {
+                console.error('❌ [ZEROENTROPY] Indexing failed:', err);
+                isIndexingRef.current.delete(currentDocumentId);
+              });
+          } catch (err) {
+            console.error('❌ [ZEROENTROPY] Failed to prepare document:', err);
+            isIndexingRef.current.delete(currentDocumentId);
+          }
+        })();
+      }
+    }
+  }, [currentDocumentId, pdfDocument, allPageObjects, documents]);
+
   // ===================================================================
   // Action Handlers
   // ===================================================================
@@ -569,13 +637,86 @@ const App: React.FC = () => {
       pageNumber: msg.pageNumber,
     }));
 
-    // Build context strings first
+    // STEP 1: Query ZeroEntropy for relevant context from entire document
+    let retrievedContext: Array<{
+      text: string;
+      pageNumber: number;
+      score: number;
+    }> = [];
+
+    if (currentDocumentId) {
+      try {
+        console.log('🔍 [ASK] Querying ZeroEntropy for relevant context...');
+
+        const zeResults = await window.electronAPI.ai.searchZE(currentDocumentId, question, 5);
+
+        console.log(`✅ [ASK] ZeroEntropy retrieved ${zeResults.length} relevant snippets`);
+
+        if (zeResults.length > 0) {
+          zeResults.forEach((result, idx) => {
+            console.log(
+              `  ${idx + 1}. Page ${result.pageNumber}, score: ${result.score.toFixed(3)}`
+            );
+          });
+        }
+
+        retrievedContext = zeResults;
+      } catch (err) {
+        console.warn('⚠️  [ASK] ZeroEntropy query failed:', err);
+      }
+    }
+
+    // STEP 2: Build structured context with retrieved + local content
     const contextStrings: string[] = [];
-    if (extractResult.text) contextStrings.push(extractResult.text);
-    if (extractResult.latex) contextStrings.push(`LaTeX:\n${extractResult.latex}`);
-    if (selectionContext?.context?.length) {
+
+    // Part A: Retrieved context from document-wide search
+    if (retrievedContext.length > 0) {
+      contextStrings.push('=== RELEVANT CONTEXT FROM DOCUMENT ===');
       contextStrings.push(
-        ...selectionContext.context.map(p => `p.${p.pageNumber} ¶${p.indexInPage + 1}: ${p.text}`)
+        '(Key passages retrieved from elsewhere in the document that may help answer your question)'
+      );
+      contextStrings.push('');
+
+      retrievedContext.forEach((result, idx) => {
+        contextStrings.push(
+          `[Passage ${idx + 1} - Page ${result.pageNumber} - Relevance: ${(
+            result.score * 100
+          ).toFixed(0)}%]`,
+          result.text,
+          ''
+        );
+      });
+
+      contextStrings.push('');
+    }
+
+    // Part B: Current selection (what they highlighted)
+    contextStrings.push('=== CURRENT SELECTION ===');
+    contextStrings.push('(This is what the user highlighted and is asking about)');
+    contextStrings.push('');
+
+    if (extractResult.text) {
+      contextStrings.push(extractResult.text);
+    }
+
+    if (extractResult.latex) {
+      contextStrings.push('');
+      contextStrings.push('LaTeX from selection:');
+      contextStrings.push(extractResult.latex);
+    }
+
+    contextStrings.push('');
+
+    // Part C: Surrounding context (±2 paragraphs on same page)
+    if (selectionContext?.context?.length) {
+      contextStrings.push('=== SURROUNDING CONTEXT (Same Page) ===');
+      contextStrings.push('(Paragraphs immediately before and after the selection)');
+      contextStrings.push('');
+
+      contextStrings.push(
+        ...selectionContext.context.map(
+          p => `[Page ${p.pageNumber}, ¶${p.indexInPage + 1}]\n${p.text}`
+        )
       );
     }
 
@@ -642,6 +783,7 @@ const App: React.FC = () => {
     selectionContext,
     lastSelection,
     messages,
+    currentDocumentId,
   ]);
 
   // ===================================================================

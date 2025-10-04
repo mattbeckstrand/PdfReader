@@ -28,6 +28,9 @@ const electronAPI = {
         },
         embed: (text) => electron_1.ipcRenderer.invoke('ai:embed', text),
         search: (documentId, query, topK = 5) => electron_1.ipcRenderer.invoke('ai:search', { documentId, query, topK }),
+        // ZeroEntropy integration
+        indexDocumentZE: (documentId, documentTitle, pages) => electron_1.ipcRenderer.invoke('ai:index-document-ze', { documentId, documentTitle, pages }),
+        searchZE: (documentId, query, topK) => electron_1.ipcRenderer.invoke('ai:search-ze', { documentId, query, topK }),
     },
     settings: {
         get: (key) => electron_1.ipcRenderer.invoke('settings:get', key),

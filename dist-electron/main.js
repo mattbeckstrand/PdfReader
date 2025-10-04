@@ -9,6 +9,7 @@ import { readFile, writeFile } from 'fs/promises';
 import * as path from 'path';
 import { dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { ZeroEntropy } from 'zeroentropy';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 // Log loaded environment variables (for debugging)
@@ -17,7 +18,25 @@ console.log('🔐 Environment loaded:', {
     hasMathPixId: !!process.env['MATHPIX_APP_ID'],
     hasMathPixKey: !!process.env['MATHPIX_APP_KEY'],
     hasBackendUrl: !!process.env['BACKEND_API_URL'],
+    hasZeroEntropy: !!process.env['ZERO_ENTROPY'],
 });
+// ============================================================================
+// ZeroEntropy Client Setup
+// ============================================================================
+// Initialize ZeroEntropy client (lazy initialization)
+let zeroEntropyClient = null;
+function getZeroEntropyClient() {
+    if (!zeroEntropyClient) {
+        const apiKey = process.env['ZERO_ENTROPY'];
+        if (!apiKey) {
+            return null;
+        }
+        zeroEntropyClient = new ZeroEntropy({ apiKey });
+    }
+    return zeroEntropyClient;
+}
+// Store mapping of document IDs to ZeroEntropy collection names
+const documentCollections = new Map();
 // Backend API URL
 const BACKEND_API_URL = process.env['BACKEND_API_URL'] || 'http://localhost:3001';
 // License storage path
@@ -250,6 +269,14 @@ ipcMain.handle('ai:ask', async (event, args) => {
         const prompt = imageBase64
             ? [
                 '🎓 ROLE: You are an expert tutor helping a student understand THIS SPECIFIC TEXTBOOK. Your job is to teach using ONLY what this textbook has presented, preserving its notation, definitions, and approach.',
+                '',
+                '📊 CONTEXT STRUCTURE:',
+                'You will receive context in THREE parts:',
+                '1. RELEVANT CONTEXT FROM DOCUMENT: Key passages retrieved from elsewhere in the textbook (definitions, theorems, prior explanations)',
+                '2. CURRENT SELECTION: The exact text the student highlighted and is asking about',
+                '3. SURROUNDING CONTEXT: Paragraphs immediately before and after the selection on the same page',
+                '',
+                'USE ALL THREE to form your answer. The retrieved context often contains foundational definitions or theorems needed to properly explain the current selection.',
                 historySection,
                 '',
                 '📸 IMAGE: See the screenshot above showing the selected content from the PDF.',
@@ -265,7 +292,7 @@ ipcMain.handle('ai:ask', async (event, args) => {
                 '',
                 '🔒 STAY WITHIN THE TEXTBOOK:',
                 '- You must ONLY use information from the provided PDF context above',
-                '- Use the textbook\'s exact notation, definitions, and terminology',
+                "- Use the textbook's exact notation, definitions, and terminology",
                 '- If the textbook proves something using method X, use method X - do NOT suggest alternative approaches from outside this textbook',
                 '- If the context lacks information to answer fully, say: "The provided context shows [what you see], but to fully explain this I would need [what\'s missing, e.g., the definition from an earlier chapter]"',
                 '- Do NOT fill gaps with knowledge from your training data',
@@ -279,7 +306,7 @@ ipcMain.handle('ai:ask', async (event, args) => {
                 '✍️ RESPONSE STRUCTURE:',
                 '1. Direct Answer (1-2 sentences): Answer the question immediately',
                 '2. Intuition (2-3 sentences): Explain WHY in plain language first',
-                '3. Details: Formal definitions, equations, proofs - using the textbook\'s approach',
+                "3. Details: Formal definitions, equations, proofs - using the textbook's approach",
                 '4. Connection (if relevant): How this relates to surrounding content',
                 '',
                 '🎯 TEACHING STYLE:',
@@ -298,6 +325,14 @@ ipcMain.handle('ai:ask', async (event, args) => {
             ].join('\n')
             : [
                 '🎓 ROLE: You are an expert tutor helping a student understand THIS SPECIFIC TEXTBOOK. Your job is to teach using ONLY what this textbook has presented, preserving its notation, definitions, and approach.',
+                '',
+                '📊 CONTEXT STRUCTURE:',
+                'You will receive context in THREE parts:',
+                '1. RELEVANT CONTEXT FROM DOCUMENT: Key passages retrieved from elsewhere in the textbook (definitions, theorems, prior explanations)',
+                '2. CURRENT SELECTION: The exact text the student highlighted and is asking about',
+                '3. SURROUNDING CONTEXT: Paragraphs immediately before and after the selection on the same page',
+                '',
+                'USE ALL THREE to form your answer. The retrieved context often contains foundational definitions or theorems needed to properly explain the current selection.',
                 '',
                 '📖 TEXTBOOK CONTEXT PROVIDED:',
                 '---',
@@ -320,7 +355,7 @@ ipcMain.handle('ai:ask', async (event, args) => {
                 '✍️ RESPONSE STRUCTURE:',
                 '1. **Direct Answer** (1-2 sentences): Answer their question immediately',
                 '2. **Intuition** (2-3 sentences): Explain WHY this is true in plain language',
-                '3. **Details** (as needed): Formal definitions, equations, or proofs using the textbook\'s exact approach',
+                "3. **Details** (as needed): Formal definitions, equations, or proofs using the textbook's exact approach",
                 '4. **Connection** (1 sentence, if relevant): How this relates to the surrounding context',
                 '',
                 '📚 CITATION & GROUNDING:',
@@ -385,6 +420,183 @@ ipcMain.handle('ai:ask', async (event, args) => {
             pageNumber,
         });
         return { requestId };
+    }
+});
+// ============================================================================
+// ZeroEntropy Integration - Document Retrieval
+// ============================================================================
+/**
+ * IPC Handler: ai:index-document-ze
+ * Purpose: Index entire PDF in ZeroEntropy for semantic search
+ * Called when: PDF is loaded
+ */
+ipcMain.handle('ai:index-document-ze', async (_event, args) => {
+    const { documentId, documentTitle, pages } = args;
+    console.log(`📚 [ZEROENTROPY] Starting indexing for: ${documentTitle}`);
+    console.log(`📚 [ZEROENTROPY] Total pages: ${pages.length}`);
+    const client = getZeroEntropyClient();
+    if (!client) {
+        throw new Error('ZERO_ENTROPY API key not found in environment');
+    }
+    try {
+        // Use documentId as collection name (sanitize it)
+        const collectionName = documentId.replace(/[^a-zA-Z0-9_-]/g, '_');
+        // Step 1: Create collection (or use existing)
+        let collectionId = documentCollections.get(documentId);
+        let isNewCollection = false;
+        if (!collectionId) {
+            console.log(`📦 [ZEROENTROPY] Creating collection: ${collectionName}`);
+            try {
+                await client.collections.add({
+                    collection_name: collectionName,
+                });
+                documentCollections.set(documentId, collectionName);
+                collectionId = collectionName;
+                isNewCollection = true;
+                console.log(`✅ [ZEROENTROPY] Created collection: ${collectionName}`);
+            }
+            catch (error) {
+                // Collection might already exist
+                if (error.message?.includes('already exists') || error.status === 409) {
+                    console.log(`✅ [ZEROENTROPY] Collection already exists: ${collectionName}`);
+                    documentCollections.set(documentId, collectionName);
+                    collectionId = collectionName;
+                    isNewCollection = false;
+                }
+                else {
+                    throw error;
+                }
+            }
+        }
+        else {
+            console.log(`✅ [ZEROENTROPY] Using existing collection: ${collectionId}`);
+            isNewCollection = false;
+        }
+        // Step 2: Check if collection already has documents (Option A: Skip re-indexing)
+        if (!isNewCollection) {
+            console.log('🔍 [ZEROENTROPY] Checking if documents already indexed...');
+            try {
+                // Quick test query to see if documents exist
+                const testQuery = await client.queries.topDocuments({
+                    collection_name: collectionName,
+                    query: 'test',
+                    k: 1,
+                });
+                if (testQuery.results && testQuery.results.length > 0) {
+                    console.log('✅ [ZEROENTROPY] Documents already indexed, skipping re-indexing');
+                    return { success: true, collectionId: collectionName };
+                }
+            }
+            catch (error) {
+                console.log('ℹ️  [ZEROENTROPY] No existing documents found, proceeding with indexing');
+            }
+        }
+        // Step 3: Add pages to collection using SDK
+        console.log(`📄 [ZEROENTROPY] Indexing ${pages.length} pages...`);
+        let successCount = 0;
+        for (let i = 0; i < pages.length; i++) {
+            const page = pages[i];
+            if (!page || !page.text) {
+                continue;
+            }
+            try {
+                await client.documents.add({
+                    collection_name: collectionName,
+                    path: `page_${page.pageNumber}.txt`,
+                    content: {
+                        type: 'text',
+                        text: page.text,
+                    },
+                    metadata: {
+                        pageNumber: String(page.pageNumber),
+                        documentId: documentId,
+                        documentTitle: documentTitle,
+                    },
+                });
+                successCount++;
+                // Log progress every 50 pages
+                if (successCount % 50 === 0 || i === pages.length - 1) {
+                    console.log(`📤 [ZEROENTROPY] Indexed ${successCount}/${pages.length} pages`);
+                }
+            }
+            catch (error) {
+                // Silent skip for 409 errors (already exists)
+                if (error.status !== 409) {
+                    console.warn(`⚠️  [ZEROENTROPY] Failed to index page ${page.pageNumber}:`, error.message);
+                }
+            }
+        }
+        console.log(`✅ [ZEROENTROPY] Successfully indexed ${successCount}/${pages.length} pages`);
+        return { success: true, collectionId: collectionName };
+    }
+    catch (error) {
+        console.error('❌ [ZEROENTROPY] Indexing failed:', error);
+        throw new Error(`ZeroEntropy indexing failed: ${error?.message || 'Unknown error'}`);
+    }
+});
+/**
+ * IPC Handler: ai:search-ze
+ * Purpose: Query ZeroEntropy for relevant document snippets
+ * Called when: User asks a question
+ */
+ipcMain.handle('ai:search-ze', async (_event, args) => {
+    const { documentId, query, topK = 5 } = args;
+    console.log(`🔍 [ZEROENTROPY] Query: "${query.substring(0, 50)}..."`);
+    console.log(`🔍 [ZEROENTROPY] Document: ${documentId}, topK: ${topK}`);
+    const client = getZeroEntropyClient();
+    if (!client) {
+        console.warn('⚠️  [ZEROENTROPY] No API key, returning empty results');
+        return [];
+    }
+    const collectionName = documentCollections.get(documentId);
+    if (!collectionName) {
+        console.warn(`⚠️  [ZEROENTROPY] Document ${documentId} not indexed`);
+        return [];
+    }
+    try {
+        // Query ZeroEntropy using SDK
+        const response = await client.queries.topDocuments({
+            collection_name: collectionName,
+            query: query,
+            k: topK,
+        });
+        // Fetch content from file URLs (ZeroEntropy returns URLs, not content directly)
+        const results = [];
+        for (const result of response.results || []) {
+            try {
+                // Extract page number from path (e.g., "page_11.txt" → 11)
+                const pageMatch = result.path?.match(/page_(\d+)\.txt/);
+                const pageNumber = pageMatch ? parseInt(pageMatch[1], 10) : 0;
+                // Fetch content from file_url
+                let text = '';
+                if (result.file_url) {
+                    const contentResponse = await fetch(result.file_url);
+                    if (contentResponse.ok) {
+                        text = await contentResponse.text();
+                    }
+                }
+                results.push({
+                    text: text,
+                    pageNumber: pageNumber,
+                    score: result.score || 0,
+                    metadata: result.metadata || {},
+                });
+            }
+            catch (error) {
+                console.warn('⚠️  [ZEROENTROPY] Failed to process result:', error.message);
+            }
+        }
+        console.log(`✅ [ZEROENTROPY] Retrieved ${results.length} results`);
+        if (results.length > 0) {
+            results.forEach((result, idx) => {
+                console.log(`  ${idx + 1}. Page ${result.pageNumber}, score ${result.score.toFixed(3)}`, `\n     Text length: ${result.text.length} chars`, `\n     Preview: "${result.text.substring(0, 100)}..."`);
+            });
+        }
+        return results;
+    }
+    catch (error) {
+        console.error('❌ [ZEROENTROPY] Query error:', error);
+        return [];
     }
 });
 // ============================================================================

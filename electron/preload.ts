@@ -31,6 +31,25 @@ interface ElectronAPI {
     onStreamChunk: (callback: (data: StreamChunk) => void) => () => void;
     embed: (text: string) => Promise<number[]>;
     search: (documentId: string, query: string, topK?: number) => Promise<VectorSearchResult[]>;
+
+    // ZeroEntropy integration
+    indexDocumentZE: (
+      documentId: string,
+      documentTitle: string,
+      pages: Array<{ pageNumber: number; text: string }>
+    ) => Promise<{ success: boolean; collectionId: string }>;
+    searchZE: (
+      documentId: string,
+      query: string,
+      topK?: number
+    ) => Promise<
+      Array<{
+        text: string;
+        pageNumber: number;
+        score: number;
+        metadata?: Record<string, any>;
+      }>
+    >;
   };
 
   // Settings
@@ -217,6 +236,15 @@ const electronAPI: ElectronAPI = {
     embed: (text: string) => ipcRenderer.invoke('ai:embed', text),
     search: (documentId: string, query: string, topK = 5) =>
       ipcRenderer.invoke('ai:search', { documentId, query, topK }),
+
+    // ZeroEntropy integration
+    indexDocumentZE: (
+      documentId: string,
+      documentTitle: string,
+      pages: Array<{ pageNumber: number; text: string }>
+    ) => ipcRenderer.invoke('ai:index-document-ze', { documentId, documentTitle, pages }),
+    searchZE: (documentId: string, query: string, topK?: number) =>
+      ipcRenderer.invoke('ai:search-ze', { documentId, query, topK }),
   },
 
   settings: {
