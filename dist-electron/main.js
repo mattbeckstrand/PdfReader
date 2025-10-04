@@ -3,8 +3,9 @@ import dotenv from 'dotenv';
 dotenv.config();
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { spawn } from 'child_process';
+import { randomBytes } from 'crypto';
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
-import { readFile } from 'fs/promises';
+import { readFile, writeFile } from 'fs/promises';
 import * as path from 'path';
 import { dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -15,7 +16,12 @@ console.log('🔐 Environment loaded:', {
     hasGeminiKey: !!process.env['VITE_GEMINI_API_KEY'] || !!process.env['GEMINI_API_KEY'],
     hasMathPixId: !!process.env['MATHPIX_APP_ID'],
     hasMathPixKey: !!process.env['MATHPIX_APP_KEY'],
+    hasBackendUrl: !!process.env['BACKEND_API_URL'],
 });
+// Backend API URL
+const BACKEND_API_URL = process.env['BACKEND_API_URL'] || 'http://localhost:3001';
+// License storage path
+const LICENSE_FILE = path.join(app.getPath('userData'), 'license.json');
 function createWindow() {
     const win = new BrowserWindow({
         width: 1200,
@@ -323,153 +329,278 @@ ipcMain.handle('ai:ask', async (event, args) => {
         return { requestId };
     }
 });
+// ============================================================================
+// License Management
+// ============================================================================
 /**
- * Show file in system file manager (Finder on macOS, Explorer on Windows)
+ * Generate unique device ID
  */
-ipcMain.handle('shell:show-item-in-folder', async (_event, fullPath) => {
+function getDeviceId() {
+    const storageId = path.join(app.getPath('userData'), 'device-id.txt');
     try {
-        console.log('📂 Showing item in folder:', fullPath);
-        shell.showItemInFolder(fullPath);
-        return { success: true };
+        const fs = require('fs');
+        if (fs.existsSync(storageId)) {
+            return fs.readFileSync(storageId, 'utf8').trim();
+        }
+        const newId = randomBytes(16).toString('hex');
+        fs.writeFileSync(storageId, newId, 'utf8');
+        return newId;
     }
     catch (error) {
-        console.error('❌ Failed to show item in folder:', error);
+        console.error('❌ Failed to get device ID:', error);
+        return randomBytes(16).toString('hex');
+    }
+}
+/**
+ * Verify license key with backend
+ */
+ipcMain.handle('license:verify', async (_event, licenseKey) => {
+    try {
+        console.log('🔑 Verifying license...');
+        const response = await fetch(`${BACKEND_API_URL}/api/license/verify`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ licenseKey }),
+        });
+        const data = await response.json();
+        console.log('✅ License verification result:', data.valid);
+        return data;
+    }
+    catch (error) {
+        console.error('❌ License verification failed:', error);
         return {
-            success: false,
-            error: error instanceof Error ? error.message : 'Failed to show item in folder',
+            valid: false,
+            error: error?.message || 'Failed to verify license',
         };
     }
 });
 /**
- * Send file via Messages app on macOS
+ * Get license by email (for auto-activation after payment)
  */
-ipcMain.handle('shell:send-via-messages', async (_event, fullPath) => {
+ipcMain.handle('license:get-by-email', async (_event, email) => {
     try {
-        console.log('💬 Sending via Messages:', fullPath);
-        if (process.platform === 'darwin') {
-            const { exec } = await import('child_process');
-            const { promisify } = await import('util');
-            const execAsync = promisify(exec);
-            // AppleScript to open Messages with file attached
-            const script = `
-        tell application "Messages"
-          activate
-          -- This will open Messages app where user can select a contact
-          -- and the file will be ready to attach
-        end tell
-        
-        tell application "System Events"
-          tell process "Messages"
-            -- Wait for Messages to open
-            delay 0.5
-            -- Simulate Cmd+N to start new message
-            keystroke "n" using {command down}
-            delay 0.3
-          end tell
-        end tell
-      `;
-            try {
-                await execAsync(`osascript -e '${script.replace(/'/g, "\\'")}'`);
-                // After opening Messages, try to attach the file
-                const attachScript = `
-          tell application "System Events"
-            tell process "Messages"
-              delay 0.5
-              -- Try to drag/attach file (user can also manually drag it)
-              keystroke "a" using {command down}
-              delay 0.3
-            end tell
-          end tell
-        `;
-                // This opens the attachment picker
-                await execAsync(`osascript -e '${attachScript.replace(/'/g, "\\'")}'`);
-                return { success: true };
-            }
-            catch (error) {
-                console.error('❌ Messages AppleScript failed:', error);
-                // Fallback: just open Messages app
-                await execAsync('open -a Messages');
-                return { success: true, fallback: true };
-            }
+        console.log('🔍 Fetching license for email:', email);
+        const response = await fetch(`${BACKEND_API_URL}/api/license/by-email/${encodeURIComponent(email)}`);
+        const data = await response.json();
+        if (data.success) {
+            console.log('✅ Found license:', data.licenseKey);
         }
         else {
-            return { success: false, error: 'Messages integration only available on macOS' };
+            console.log('❌ No license found');
         }
+        return data;
     }
     catch (error) {
-        console.error('❌ Failed to send via Messages:', error);
+        console.error('❌ Failed to fetch license:', error);
         return {
             success: false,
-            error: error instanceof Error ? error.message : 'Failed to send via Messages',
+            error: error?.message || 'Failed to fetch license',
         };
     }
 });
 /**
- * Show native macOS share sheet for a file
+ * Activate license for this device
  */
-ipcMain.handle('shell:share-item', async (_event, fullPath) => {
+ipcMain.handle('license:activate', async (_event, args) => {
     try {
-        console.log('🔗 Sharing item:', fullPath);
-        if (process.platform === 'darwin') {
-            // Use AppleScript to trigger the native macOS share menu
-            const { exec } = await import('child_process');
-            const { promisify } = await import('util');
-            const execAsync = promisify(exec);
-            // Escape the file path for AppleScript
-            const escapedPath = fullPath.replace(/"/g, '\\"');
-            // AppleScript to open Finder, select the file, and trigger share menu
-            // Uses Finder's menu bar Share menu for most reliable access
-            const script = `
-        tell application "Finder"
-          activate
-          set theFile to POSIX file "${escapedPath}" as alias
-          reveal theFile
-          select theFile
-        end tell
-
-        delay 0.4
-
-        tell application "System Events"
-          tell process "Finder"
-            -- Click on File menu in menu bar
-            click menu bar item "File" of menu bar 1
-            delay 0.2
-
-            -- Click on Share submenu
-            try
-              click menu item "Share" of menu "File" of menu bar item "File" of menu bar 1
-            on error errMsg
-              -- Try alternative path for different macOS versions
-              try
-                click menu item "Share" of menu 1 of menu bar item "File" of menu bar 1
-              end try
-            end try
-          end tell
-        end tell
-      `;
-            try {
-                await execAsync(`osascript -e '${script.replace(/'/g, "\\'")}'`);
-                return { success: true };
-            }
-            catch (error) {
-                console.error('❌ AppleScript failed, falling back to Finder:', error);
-                // Fallback: just show in Finder so user can manually share
-                shell.showItemInFolder(fullPath);
-                return { success: true, fallback: true };
-            }
+        const { licenseKey, email } = args;
+        const deviceId = getDeviceId();
+        console.log('🔑 Activating license...', { email, deviceId: deviceId.substring(0, 8) });
+        const response = await fetch(`${BACKEND_API_URL}/api/license/activate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ licenseKey, email, deviceId }),
+        });
+        const data = await response.json();
+        if (data.success) {
+            // Store license locally
+            await writeFile(LICENSE_FILE, JSON.stringify({ licenseKey, email }), 'utf8');
+            console.log('✅ License activated and stored locally');
         }
-        else {
-            // On other platforms, just show in file manager
-            shell.showItemInFolder(fullPath);
-            return { success: true };
+        return data;
+    }
+    catch (error) {
+        console.error('❌ License activation failed:', error);
+        return {
+            success: false,
+            error: error?.message || 'Failed to activate license',
+        };
+    }
+});
+/**
+ * Get stored license from local storage
+ */
+ipcMain.handle('license:get-stored', async () => {
+    try {
+        const data = await readFile(LICENSE_FILE, 'utf8');
+        return JSON.parse(data);
+    }
+    catch (error) {
+        // File doesn't exist or is invalid
+        return null;
+    }
+});
+/**
+ * Store license locally
+ */
+ipcMain.handle('license:store', async (_event, args) => {
+    try {
+        await writeFile(LICENSE_FILE, JSON.stringify(args), 'utf8');
+        console.log('✅ License stored locally');
+    }
+    catch (error) {
+        console.error('❌ Failed to store license:', error);
+        throw error;
+    }
+});
+/**
+ * Clear stored license
+ */
+ipcMain.handle('license:clear', async () => {
+    try {
+        const fs = require('fs');
+        if (fs.existsSync(LICENSE_FILE)) {
+            fs.unlinkSync(LICENSE_FILE);
+            console.log('✅ License cleared');
         }
     }
     catch (error) {
-        console.error('❌ Failed to share item:', error);
+        console.error('❌ Failed to clear license:', error);
+    }
+});
+/**
+ * Create Stripe checkout session
+ */
+ipcMain.handle('license:create-checkout', async (event, args) => {
+    try {
+        const { priceId, email } = args;
+        console.log('💳 Creating checkout session...', { priceId, email });
+        const response = await fetch(`${BACKEND_API_URL}/api/checkout`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                priceId,
+                email,
+                successUrl: 'pdfaireader://payment-success',
+                cancelUrl: 'pdfaireader://payment-cancel',
+            }),
+        });
+        const data = await response.json();
+        if (data.success && data.checkoutUrl) {
+            // Open checkout in modal window instead of browser
+            const parentWindow = BrowserWindow.fromWebContents(event.sender);
+            openStripeCheckoutModal(data.checkoutUrl, parentWindow);
+        }
+        return data;
+    }
+    catch (error) {
+        console.error('❌ Checkout creation failed:', error);
         return {
             success: false,
-            error: error instanceof Error ? error.message : 'Failed to share item',
+            error: error?.message || 'Failed to create checkout',
         };
+    }
+});
+/**
+ * Open Stripe checkout in a modal window
+ */
+function openStripeCheckoutModal(checkoutUrl, parent) {
+    const modalWindow = new BrowserWindow({
+        width: 500,
+        height: 700,
+        parent: parent || undefined,
+        modal: true,
+        show: false,
+        webPreferences: {
+            nodeIntegration: false,
+            contextIsolation: true,
+        },
+        title: 'Complete Your Purchase',
+        backgroundColor: '#ffffff',
+    });
+    modalWindow.loadURL(checkoutUrl);
+    modalWindow.once('ready-to-show', () => {
+        modalWindow.show();
+    });
+    // Close modal when user completes or cancels payment
+    modalWindow.webContents.on('will-navigate', (event, url) => {
+        console.log('🔄 Navigation detected:', url);
+        if (url.includes('pdfaireader://')) {
+            event.preventDefault(); // Prevent loading the custom URL
+            const isSuccess = url.includes('payment-success');
+            console.log(isSuccess ? '✅ Payment completed!' : '❌ Payment cancelled');
+            modalWindow.close();
+            // Notify renderer that payment flow is complete
+            if (parent) {
+                parent.webContents.send('checkout-complete', {
+                    success: isSuccess,
+                });
+            }
+        }
+    });
+    // Handle external links (like privacy policy) in default browser
+    modalWindow.webContents.setWindowOpenHandler(({ url }) => {
+        shell.openExternal(url);
+        return { action: 'deny' };
+    });
+}
+/**
+ * Handle system:open-external
+ */
+ipcMain.handle('system:open-external', async (_event, url) => {
+    try {
+        await shell.openExternal(url);
+    }
+    catch (error) {
+        console.error('❌ Failed to open URL:', error);
+    }
+});
+/**
+ * Open OAuth flow in modal (for Apple/Google Sign In)
+ */
+ipcMain.handle('system:open-oauth-modal', async (event, authUrl) => {
+    try {
+        const parentWindow = BrowserWindow.fromWebContents(event.sender);
+        const oauthWindow = new BrowserWindow({
+            width: 500,
+            height: 700,
+            parent: parentWindow || undefined,
+            modal: true,
+            show: false,
+            webPreferences: {
+                nodeIntegration: false,
+                contextIsolation: true,
+            },
+            title: 'Sign In',
+            backgroundColor: '#ffffff',
+        });
+        oauthWindow.loadURL(authUrl);
+        oauthWindow.once('ready-to-show', () => {
+            oauthWindow.show();
+        });
+        // Listen for successful OAuth callback
+        oauthWindow.webContents.on('will-navigate', (event, url) => {
+            console.log('🔄 OAuth navigation:', url);
+            // Check if this is the Supabase callback URL with tokens
+            if (url.includes('supabase.co/auth/v1/callback') &&
+                (url.includes('#') || url.includes('?'))) {
+                event.preventDefault(); // Prevent navigation
+                // Extract tokens from URL and send to parent window
+                if (parentWindow) {
+                    parentWindow.webContents.send('oauth-callback', { url });
+                }
+                // Close the OAuth window
+                oauthWindow.close();
+            }
+        });
+        // Handle external links
+        oauthWindow.webContents.setWindowOpenHandler(({ url }) => {
+            shell.openExternal(url);
+            return { action: 'deny' };
+        });
+    }
+    catch (error) {
+        console.error('❌ Failed to open OAuth modal:', error);
     }
 });
 //# sourceMappingURL=main.js.map

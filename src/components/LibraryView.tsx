@@ -13,6 +13,8 @@ interface LibraryViewProps {
   documents: LibraryDocument[];
   onOpenDocument: (doc: LibraryDocument) => void;
   onAddDocument: () => void;
+  onSignOut?: () => void;
+  userEmail?: string;
 }
 
 // ===================================================================
@@ -33,6 +35,8 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
   documents,
   onOpenDocument,
   onAddDocument,
+  onSignOut,
+  userEmail,
 }) => {
   const theme = document.documentElement.getAttribute('data-theme') || 'dark';
   // ===================================================================
@@ -252,10 +256,62 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
     <div className="library-bg">
       <div className="library-container">
         {/* Header */}
-        <div style={{ marginBottom: '40px' }}>
-          <div className="library-header" style={{ marginBottom: '20px' }}>
-            <h1>Library</h1>
-            <p>Your personal reading collection</p>
+        <div style={{ marginBottom: '56px' }}>
+          <div className="library-header" style={{ marginBottom: '32px', position: 'relative' }}>
+            <div>
+              <h1>Library</h1>
+              <p>Your personal reading collection</p>
+            </div>
+
+            {/* Sign Out Button */}
+            {onSignOut && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  right: 0,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'flex-end',
+                  gap: '8px',
+                }}
+              >
+                {userEmail && (
+                  <div
+                    style={{
+                      fontSize: '13px',
+                      color: 'var(--text-3)',
+                    }}
+                  >
+                    {userEmail}
+                  </div>
+                )}
+                <button
+                  onClick={onSignOut}
+                  style={{
+                    padding: '8px 16px',
+                    fontSize: '13px',
+                    fontWeight: '500',
+                    border: '1px solid var(--stroke-1)',
+                    borderRadius: 'var(--radius-md)',
+                    backgroundColor: 'var(--surface-2)',
+                    color: 'var(--text-2)',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.backgroundColor = 'var(--surface-3)';
+                    e.currentTarget.style.color = 'var(--text-1)';
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.backgroundColor = 'var(--surface-2)';
+                    e.currentTarget.style.color = 'var(--text-2)';
+                  }}
+                >
+                  Sign Out
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Featured Add Button + View Toggle */}
