@@ -53,6 +53,8 @@ interface ElectronAPI {
   system: {
     platform: NodeJS.Platform;
     openExternal: (url: string) => Promise<void>;
+    openOAuthModal: (url: string) => Promise<void>;
+    onOAuthCallback: (callback: (data: { url: string }) => void) => () => void;
   };
 
   // Shell operations
@@ -78,6 +80,23 @@ interface ElectronAPI {
       text?: string;
       latex?: string;
       source?: string;
+      error?: string;
+    }>;
+  };
+
+  // License & Payment
+  license: {
+    verify: (licenseKey: string) => Promise<LicenseStatus>;
+    activate: (licenseKey: string, email: string) => Promise<ActivateLicenseResponse>;
+    getStored: () => Promise<StoredLicense | null>;
+    store: (licenseKey: string, email: string) => Promise<void>;
+    clear: () => Promise<void>;
+    createCheckout: (priceId: string, email: string) => Promise<CreateCheckoutResponse>;
+    getByEmail: (email: string) => Promise<{
+      success: boolean;
+      licenseKey?: string;
+      email?: string;
+      plan?: string;
       error?: string;
     }>;
   };
@@ -130,6 +149,33 @@ interface ConversationMessage {
   role: 'user' | 'assistant';
   content: string;
   pageNumber?: number;
+}
+
+interface LicenseStatus {
+  valid: boolean;
+  email?: string;
+  activatedAt?: string;
+  expiresAt?: string | null;
+  plan?: 'lifetime' | 'monthly' | 'yearly';
+  error?: string;
+}
+
+interface ActivateLicenseResponse {
+  success: boolean;
+  license?: LicenseStatus;
+  error?: string;
+}
+
+interface StoredLicense {
+  licenseKey: string;
+  email: string;
+}
+
+interface CreateCheckoutResponse {
+  success: boolean;
+  checkoutUrl?: string;
+  sessionId?: string;
+  error?: string;
 }
 
 // ============================================================================
@@ -189,6 +235,14 @@ const electronAPI: ElectronAPI = {
   system: {
     platform: process.platform,
     openExternal: (url: string) => ipcRenderer.invoke('system:open-external', url),
+    openOAuthModal: (url: string) => ipcRenderer.invoke('system:open-oauth-modal', url),
+    onOAuthCallback: (callback: (data: { url: string }) => void) => {
+      const listener = (_event: any, data: { url: string }) => callback(data);
+      ipcRenderer.on('oauth-callback', listener);
+      return () => {
+        ipcRenderer.removeListener('oauth-callback', listener);
+      };
+    },
   },
 
   shell: {
@@ -201,6 +255,19 @@ const electronAPI: ElectronAPI = {
   extract: {
     region: (pdfPath, pageNumber, bbox, pythonPath) =>
       ipcRenderer.invoke('extract:region', { pdfPath, pageNumber, bbox, pythonPath }),
+  },
+
+  license: {
+    verify: (licenseKey: string) => ipcRenderer.invoke('license:verify', licenseKey),
+    activate: (licenseKey: string, email: string) =>
+      ipcRenderer.invoke('license:activate', { licenseKey, email }),
+    getStored: () => ipcRenderer.invoke('license:get-stored'),
+    store: (licenseKey: string, email: string) =>
+      ipcRenderer.invoke('license:store', { licenseKey, email }),
+    clear: () => ipcRenderer.invoke('license:clear'),
+    createCheckout: (priceId: string, email: string) =>
+      ipcRenderer.invoke('license:create-checkout', { priceId, email }),
+    getByEmail: (email: string) => ipcRenderer.invoke('license:get-by-email', email),
   },
 };
 
