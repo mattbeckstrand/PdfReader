@@ -75,6 +75,12 @@ export interface ElectronAPI {
   // Shell operations
   shell: {
     showItemInFolder: (fullPath: string) => Promise<void>;
+    shareItem: (
+      fullPath: string
+    ) => Promise<{ success: boolean; fallback?: boolean; error?: string }>;
+    sendViaMessages: (
+      fullPath: string
+    ) => Promise<{ success: boolean; fallback?: boolean; error?: string }>;
   };
 
   // Extraction

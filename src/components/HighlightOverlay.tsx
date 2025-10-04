@@ -106,4 +106,3 @@ export const HighlightOverlay: React.FC<HighlightOverlayProps> = ({
     </div>
   );
 };
-

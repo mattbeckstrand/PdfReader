@@ -348,19 +348,35 @@ const PdfPage: React.FC<PdfPageProps> = ({
       const rects = Array.from(range.getClientRects());
       const text = selection.toString().trim();
 
-      // Convert client rects to page-relative coordinates
+      // Convert client rects to page-relative coordinates and filter out artifacts
       const pageRect = pageContainerRef.current?.getBoundingClientRect();
-      const relativeRects = rects.map(rect => {
-        const relativeX = pageRect ? (rect.left - pageRect.left) / zoom : rect.left / zoom;
-        const relativeY = pageRect ? (rect.top - pageRect.top) / zoom : rect.top / zoom;
+      const MIN_RECT_WIDTH = 2; // Minimum width in pixels (filters out line breaks and empty fragments)
+      const MIN_RECT_HEIGHT = 4; // Minimum height in pixels
 
-        return {
-          x: relativeX,
-          y: relativeY,
-          width: rect.width / zoom,
-          height: rect.height / zoom,
-        };
-      });
+      const relativeRects = rects
+        .filter(rect => {
+          // Filter out tiny rectangles that are layout artifacts
+          // These are often line breaks, empty spans, or container boxes
+          return rect.width >= MIN_RECT_WIDTH && rect.height >= MIN_RECT_HEIGHT;
+        })
+        .map(rect => {
+          const relativeX = pageRect ? (rect.left - pageRect.left) / zoom : rect.left / zoom;
+          const relativeY = pageRect ? (rect.top - pageRect.top) / zoom : rect.top / zoom;
+
+          return {
+            x: relativeX,
+            y: relativeY,
+            width: rect.width / zoom,
+            height: rect.height / zoom,
+          };
+        });
+
+      // Only add highlight if we have valid rectangles
+      if (relativeRects.length === 0) {
+        console.warn('No valid rectangles found for selection');
+        selection.removeAllRanges();
+        return;
+      }
 
       // Add the highlight
       onTextHighlight({
@@ -448,7 +464,7 @@ const PdfPage: React.FC<PdfPageProps> = ({
       {/* Text layer for selection (transparent overlay) */}
       <div
         ref={textLayerRef}
-        className="textLayer"
+        className={`textLayer ${highlightModeActive ? 'highlight-active' : ''}`}
         style={{
           display: isRendered ? 'block' : 'none',
         }}
