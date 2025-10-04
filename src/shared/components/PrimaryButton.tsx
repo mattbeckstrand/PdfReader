@@ -5,6 +5,8 @@ export interface PrimaryButtonProps {
   onClick?: () => void;
   className?: string;
   title?: string;
+  disabled?: boolean;
+  style?: React.CSSProperties;
 }
 
 export const PrimaryButton: React.FC<PrimaryButtonProps> = ({
@@ -12,9 +14,17 @@ export const PrimaryButton: React.FC<PrimaryButtonProps> = ({
   onClick,
   className,
   title,
+  disabled,
+  style,
 }) => {
   return (
-    <button onClick={onClick} title={title} className={`btn btn-primary ${className ?? ''}`.trim()}>
+    <button
+      onClick={onClick}
+      title={title}
+      disabled={disabled}
+      className={`btn btn-primary ${className ?? ''}`.trim()}
+      style={style}
+    >
       {children}
     </button>
   );

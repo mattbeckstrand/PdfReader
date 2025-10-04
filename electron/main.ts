@@ -664,15 +664,20 @@ ipcMain.handle('system:open-external', async (_event, url: string) => {
 
 /**
  * Open OAuth flow in modal (for Apple/Google Sign In)
+ * Clean implementation that properly handles the Supabase OAuth callback
  */
 ipcMain.handle('system:open-oauth-modal', async (event, authUrl: string) => {
   try {
     const parentWindow = BrowserWindow.fromWebContents(event.sender);
+    if (!parentWindow) {
+      console.error('❌ No parent window found for OAuth modal');
+      return;
+    }
 
     const oauthWindow = new BrowserWindow({
       width: 500,
       height: 700,
-      parent: parentWindow || undefined,
+      parent: parentWindow,
       modal: true,
       show: false,
       webPreferences: {
@@ -683,31 +688,74 @@ ipcMain.handle('system:open-oauth-modal', async (event, authUrl: string) => {
       backgroundColor: '#ffffff',
     });
 
-    oauthWindow.loadURL(authUrl);
+    let isClosing = false;
 
-    oauthWindow.once('ready-to-show', () => {
-      oauthWindow.show();
+    // Helper to safely close the modal
+    const closeModal = () => {
+      if (isClosing || oauthWindow.isDestroyed()) return;
+      isClosing = true;
+      console.log('🔒 Closing OAuth modal');
+      oauthWindow.close();
+    };
+
+    // Helper to check if URL has OAuth tokens
+    const hasOAuthTokens = (url: string): boolean => {
+      return url.includes('access_token=') || url.includes('error=');
+    };
+
+    // Helper to handle callback URL
+    const handleCallbackUrl = (url: string) => {
+      console.log('✅ OAuth callback detected with tokens');
+
+      // Send the full URL (including hash) to parent
+      if (!parentWindow.isDestroyed()) {
+        parentWindow.webContents.send('oauth-callback', { url });
+      }
+
+      // Close modal immediately
+      closeModal();
+    };
+
+    // Listen for redirects - this catches it BEFORE navigation completes
+    oauthWindow.webContents.on('will-redirect', (_event, url) => {
+      console.log('🔄 OAuth redirect:', url);
+
+      // Check if redirecting to localhost with tokens (success) or supabase callback
+      if ((url.includes('localhost') || url.includes('127.0.0.1')) && hasOAuthTokens(url)) {
+        handleCallbackUrl(url);
+      } else if (url.includes('supabase.co/auth/v1/callback') && hasOAuthTokens(url)) {
+        handleCallbackUrl(url);
+      }
     });
 
-    // Listen for successful OAuth callback
-    oauthWindow.webContents.on('will-navigate', (event, url) => {
-      console.log('🔄 OAuth navigation:', url);
+    // Listen for navigation completion
+    oauthWindow.webContents.on('did-navigate', (_event, url) => {
+      console.log('🔄 OAuth full navigation:', url);
 
-      // Check if this is the Supabase callback URL with tokens
-      if (
-        url.includes('supabase.co/auth/v1/callback') &&
-        (url.includes('#') || url.includes('?'))
-      ) {
-        event.preventDefault(); // Prevent navigation
-
-        // Extract tokens from URL and send to parent window
-        if (parentWindow) {
-          parentWindow.webContents.send('oauth-callback', { url });
-        }
-
-        // Close the OAuth window
-        oauthWindow.close();
+      // Check if navigated to localhost with tokens
+      if ((url.includes('localhost') || url.includes('127.0.0.1')) && hasOAuthTokens(url)) {
+        handleCallbackUrl(url);
+      } else if (url.includes('supabase.co/auth/v1/callback') && hasOAuthTokens(url)) {
+        handleCallbackUrl(url);
       }
+    });
+
+    // Listen for hash changes (in-page navigation)
+    oauthWindow.webContents.on('did-navigate-in-page', (_event, url) => {
+      console.log('🔄 OAuth in-page navigation (hash change):', url);
+
+      // Check if hash contains tokens
+      if (hasOAuthTokens(url)) {
+        handleCallbackUrl(url);
+      }
+    });
+
+    // Load the OAuth URL
+    oauthWindow.loadURL(authUrl);
+
+    // Show when ready
+    oauthWindow.once('ready-to-show', () => {
+      oauthWindow.show();
     });
 
     // Handle external links
@@ -715,6 +763,14 @@ ipcMain.handle('system:open-oauth-modal', async (event, authUrl: string) => {
       shell.openExternal(url);
       return { action: 'deny' };
     });
+
+    // Failsafe: Close after 60 seconds if still open
+    setTimeout(() => {
+      if (!isClosing && !oauthWindow.isDestroyed()) {
+        console.log('⏰ Failsafe timeout - closing OAuth modal');
+        closeModal();
+      }
+    }, 60000);
   } catch (error) {
     console.error('❌ Failed to open OAuth modal:', error);
   }

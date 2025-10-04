@@ -15,9 +15,12 @@ const router = Router();
  * IMPORTANT: This must use raw body, not JSON parsed
  */
 router.post('/', async (req, res) => {
+  console.log('🎯 Webhook endpoint HIT');
+
   const signature = req.headers['stripe-signature'] as string;
 
   if (!signature) {
+    console.log('❌ No signature provided');
     return res.status(400).send('No signature provided');
   }
 
@@ -25,6 +28,7 @@ router.post('/', async (req, res) => {
   const event = constructWebhookEvent(req.body, signature);
 
   if (!event) {
+    console.log('❌ Invalid signature');
     return res.status(400).send('Invalid signature');
   }
 
