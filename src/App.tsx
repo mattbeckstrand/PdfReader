@@ -740,6 +740,7 @@ const App: React.FC = () => {
               onSetCurrentPage={setCurrentPage}
               onRegionSelected={handleRegionSelected}
               onToggleChat={() => setSidebarOpen(!sidebarOpen)}
+              documentId={currentDocumentId}
               theme={theme}
               onThemeToggle={toggleTheme}
               documentMenuSlot={

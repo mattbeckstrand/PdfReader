@@ -51,6 +51,11 @@ const electronAPI = {
             };
         },
     },
+    shell: {
+        showItemInFolder: (fullPath) => electron_1.ipcRenderer.invoke('shell:show-item-in-folder', fullPath),
+        shareItem: (fullPath) => electron_1.ipcRenderer.invoke('shell:share-item', fullPath),
+        sendViaMessages: (fullPath) => electron_1.ipcRenderer.invoke('shell:send-via-messages', fullPath),
+    },
     extract: {
         region: (pdfPath, pageNumber, bbox, pythonPath) => electron_1.ipcRenderer.invoke('extract:region', { pdfPath, pageNumber, bbox, pythonPath }),
     },

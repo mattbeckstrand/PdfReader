@@ -180,6 +180,8 @@ body {
   outline: none;
   transition: border-color var(--transition), box-shadow var(--transition),
     background var(--transition);
+  font-family: inherit;
+  font-size: inherit;
 }
 .textfield input::placeholder {
   color: var(--text-muted);
@@ -189,12 +191,52 @@ body {
   background: var(--surface-3);
   box-shadow: var(--ring);
 }
+/* Remove browser autocomplete styling */
+.textfield input:-webkit-autofill,
+.textfield input:-webkit-autofill:hover,
+.textfield input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 1000px var(--surface-2) inset;
+  -webkit-text-fill-color: var(--text-1);
+  transition: background-color 5000s ease-in-out 0s;
+}
 .textfield .icon {
   position: absolute;
   left: 14px;
   top: 50%;
   transform: translateY(-50%);
   color: var(--text-muted);
+}
+
+/* Reserve room in the input for inline sort control */
+.textfield.with-suffix input {
+  padding-right: 16px;
+}
+
+/* Inline sort select positioned inside the search bar */
+.sort-inline {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 10px 34px 10px 12px;
+  background-color: var(--surface-2);
+  color: var(--text-1);
+  border: 1px solid var(--stroke-1);
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 12px 8px;
+}
+.sort-inline:hover {
+  background-color: var(--surface-3);
+  border-color: var(--stroke-2);
+}
+.sort-inline:focus {
+  outline: none;
+  box-shadow: var(--ring);
 }
 
 .segmented {
@@ -238,9 +280,9 @@ body {
   background: var(--library-gradient);
 }
 .library-container {
-  max-width: 1440px;
+  max-width: 1200px;
   margin: 0 auto;
-  padding: 100px 48px 80px 48px;
+  padding: 40px 48px 80px 48px;
   position: relative;
 }
 .library-header h1 {
@@ -260,16 +302,18 @@ body {
 
 .toolbar {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  gap: 28px;
+  grid-template-columns: 1fr;
+  grid-template-rows: auto auto; /* search on row 1, dropdown on row 2 */
+  gap: 10px;
   align-items: center;
 }
 .toolbar-left {
   min-width: 0; /* allow the search to shrink instead of overflow */
+  max-width: 655px; /* spans approximately 2 card widths to match Recent section */
+  position: relative;
 }
 .toolbar-right {
   display: flex;
-  gap: 12px;
   justify-self: end;
 }
 
@@ -450,12 +494,23 @@ body {
   align-items: center;
   gap: 12px;
   margin-bottom: 24px;
+  color: var(--text-2);
+  background: none;
+  border: none;
+  box-shadow: none;
+  backdrop-filter: none;
+  padding: 0;
 }
 .section-title h2 {
   margin: 0;
   font-size: 20px;
   font-weight: 600;
   color: var(--text-1);
+  background: none;
+  border: none;
+  box-shadow: none;
+  text-decoration: none;
+  letter-spacing: -0.01em;
 }
 
 /* Favorite badge on card thumbnails */
@@ -476,18 +531,21 @@ body {
 
 /* Sort select dropdown */
 .sort-select {
-  padding: 10px 14px;
-  background: var(--surface-2);
+  padding: 8px 28px 8px 12px;
+  background-color: var(--surface-2);
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  background-size: 12px 8px;
   color: var(--text-1);
   border: 1px solid var(--stroke-1);
   border-radius: var(--radius-md);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
   cursor: pointer;
   transition: border-color var(--transition), background var(--transition);
 }
 .sort-select:hover {
-  background: var(--surface-3);
+  background-color: var(--surface-3);
   border-color: var(--stroke-2);
 }
 .sort-select:focus {

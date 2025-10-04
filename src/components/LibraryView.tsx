@@ -3,7 +3,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { PrimaryButton } from '../shared/components/PrimaryButton';
 import { SegmentedControl } from '../shared/components/SegmentedControl';
 import { TextField } from '../shared/components/TextField';
-import type { LibraryDocument, LibrarySortBy, LibraryViewMode } from '../types/library';
+import type { LibraryDocument, LibraryViewMode } from '../types/library';
 
 // ===================================================================
 // Types
@@ -79,7 +79,6 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
   // ===================================================================
 
   const [viewMode, setViewMode] = useState<LibraryViewMode>('grid');
-  const [sortBy, setSortBy] = useState<LibrarySortBy>('recent');
   const [searchQuery, setSearchQuery] = useState('');
 
   // ===================================================================
@@ -98,7 +97,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
       .slice(0, 5);
   }, [documents]);
 
-  // Filtered and sorted documents
+  // Filtered and sorted documents (always sorted by recent)
   const filteredDocuments = useMemo(() => {
     let filtered = documents;
 
@@ -110,30 +109,15 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
       );
     }
 
-    // Sort
+    // Sort by recently opened
     const sorted = [...filtered].sort((a, b) => {
-      switch (sortBy) {
-        case 'recent': {
-          const dateA = a.lastOpened ? new Date(a.lastOpened).getTime() : 0;
-          const dateB = b.lastOpened ? new Date(b.lastOpened).getTime() : 0;
-          return dateB - dateA;
-        }
-        case 'title':
-          return a.title.localeCompare(b.title);
-        case 'dateAdded': {
-          const dateA = new Date(a.dateAdded).getTime();
-          const dateB = new Date(b.dateAdded).getTime();
-          return dateB - dateA;
-        }
-        case 'progress':
-          return b.readingProgress - a.readingProgress;
-        default:
-          return 0;
-      }
+      const dateA = a.lastOpened ? new Date(a.lastOpened).getTime() : 0;
+      const dateB = b.lastOpened ? new Date(b.lastOpened).getTime() : 0;
+      return dateB - dateA;
     });
 
     return sorted;
-  }, [documents, searchQuery, sortBy]);
+  }, [documents, searchQuery]);
 
   // ===================================================================
   // Handlers
@@ -331,7 +315,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
           </div>
 
           {/* Featured Add Button + View Toggle */}
-          <div className="library-cta" style={{ marginBottom: '16px' }}>
+          <div className="library-cta" style={{ marginBottom: '20px' }}>
             <div className="cta-row">
               <PrimaryButton onClick={onAddDocument}>
                 <Plus size={20} />
@@ -373,26 +357,12 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                 icon={<Search size={18} style={{ color: 'var(--text-muted)' }} />}
               />
             </div>
-
-            {/* Sort & View Controls */}
-            <div className="toolbar-right">
-              <select
-                value={sortBy}
-                onChange={e => setSortBy(e.target.value as LibrarySortBy)}
-                className="sort-select"
-              >
-                <option value="recent">Recently Opened</option>
-                <option value="title">Title</option>
-                <option value="dateAdded">Date Added</option>
-                <option value="progress">Progress</option>
-              </select>
-            </div>
           </div>
         </div>
 
         {/* Recently Opened Section */}
         {recentDocuments.length > 0 && !searchQuery && (
-          <div style={{ marginBottom: '56px' }}>
+          <div style={{ marginBottom: '32px' }}>
             <div className="section-title">
               <Clock size={18} />
               <h2>Recently Opened</h2>
