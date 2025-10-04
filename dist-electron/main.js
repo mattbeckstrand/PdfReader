@@ -557,14 +557,19 @@ ipcMain.handle('system:open-external', async (_event, url) => {
 });
 /**
  * Open OAuth flow in modal (for Apple/Google Sign In)
+ * Clean implementation that properly handles the Supabase OAuth callback
  */
 ipcMain.handle('system:open-oauth-modal', async (event, authUrl) => {
     try {
         const parentWindow = BrowserWindow.fromWebContents(event.sender);
+        if (!parentWindow) {
+            console.error('❌ No parent window found for OAuth modal');
+            return;
+        }
         const oauthWindow = new BrowserWindow({
             width: 500,
             height: 700,
-            parent: parentWindow || undefined,
+            parent: parentWindow,
             modal: true,
             show: false,
             webPreferences: {
@@ -574,33 +579,229 @@ ipcMain.handle('system:open-oauth-modal', async (event, authUrl) => {
             title: 'Sign In',
             backgroundColor: '#ffffff',
         });
+        let isClosing = false;
+        // Helper to safely close the modal
+        const closeModal = () => {
+            if (isClosing || oauthWindow.isDestroyed())
+                return;
+            isClosing = true;
+            console.log('🔒 Closing OAuth modal');
+            oauthWindow.close();
+        };
+        // Helper to check if URL has OAuth tokens
+        const hasOAuthTokens = (url) => {
+            return url.includes('access_token=') || url.includes('error=');
+        };
+        // Helper to handle callback URL
+        const handleCallbackUrl = (url) => {
+            console.log('✅ OAuth callback detected with tokens');
+            // Send the full URL (including hash) to parent
+            if (!parentWindow.isDestroyed()) {
+                parentWindow.webContents.send('oauth-callback', { url });
+            }
+            // Close modal immediately
+            closeModal();
+        };
+        // Listen for redirects - this catches it BEFORE navigation completes
+        oauthWindow.webContents.on('will-redirect', (_event, url) => {
+            console.log('🔄 OAuth redirect:', url);
+            // Check if redirecting to localhost with tokens (success) or supabase callback
+            if ((url.includes('localhost') || url.includes('127.0.0.1')) && hasOAuthTokens(url)) {
+                handleCallbackUrl(url);
+            }
+            else if (url.includes('supabase.co/auth/v1/callback') && hasOAuthTokens(url)) {
+                handleCallbackUrl(url);
+            }
+        });
+        // Listen for navigation completion
+        oauthWindow.webContents.on('did-navigate', (_event, url) => {
+            console.log('🔄 OAuth full navigation:', url);
+            // Check if navigated to localhost with tokens
+            if ((url.includes('localhost') || url.includes('127.0.0.1')) && hasOAuthTokens(url)) {
+                handleCallbackUrl(url);
+            }
+            else if (url.includes('supabase.co/auth/v1/callback') && hasOAuthTokens(url)) {
+                handleCallbackUrl(url);
+            }
+        });
+        // Listen for hash changes (in-page navigation)
+        oauthWindow.webContents.on('did-navigate-in-page', (_event, url) => {
+            console.log('🔄 OAuth in-page navigation (hash change):', url);
+            // Check if hash contains tokens
+            if (hasOAuthTokens(url)) {
+                handleCallbackUrl(url);
+            }
+        });
+        // Load the OAuth URL
         oauthWindow.loadURL(authUrl);
+        // Show when ready
         oauthWindow.once('ready-to-show', () => {
             oauthWindow.show();
-        });
-        // Listen for successful OAuth callback
-        oauthWindow.webContents.on('will-navigate', (event, url) => {
-            console.log('🔄 OAuth navigation:', url);
-            // Check if this is the Supabase callback URL with tokens
-            if (url.includes('supabase.co/auth/v1/callback') &&
-                (url.includes('#') || url.includes('?'))) {
-                event.preventDefault(); // Prevent navigation
-                // Extract tokens from URL and send to parent window
-                if (parentWindow) {
-                    parentWindow.webContents.send('oauth-callback', { url });
-                }
-                // Close the OAuth window
-                oauthWindow.close();
-            }
         });
         // Handle external links
         oauthWindow.webContents.setWindowOpenHandler(({ url }) => {
             shell.openExternal(url);
             return { action: 'deny' };
         });
+        // Failsafe: Close after 60 seconds if still open
+        setTimeout(() => {
+            if (!isClosing && !oauthWindow.isDestroyed()) {
+                console.log('⏰ Failsafe timeout - closing OAuth modal');
+                closeModal();
+            }
+        }, 60000);
     }
     catch (error) {
         console.error('❌ Failed to open OAuth modal:', error);
+    }
+});
+/**
+ * Show file in system file manager (Finder on macOS, Explorer on Windows)
+ */
+ipcMain.handle('shell:show-item-in-folder', async (_event, fullPath) => {
+    try {
+        console.log('📂 Showing item in folder:', fullPath);
+        shell.showItemInFolder(fullPath);
+        return { success: true };
+    }
+    catch (error) {
+        console.error('❌ Failed to show item in folder:', error);
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : 'Failed to show item in folder',
+        };
+    }
+});
+/**
+ * Send file via Messages app on macOS
+ */
+ipcMain.handle('shell:send-via-messages', async (_event, fullPath) => {
+    try {
+        console.log('💬 Sending via Messages:', fullPath);
+        if (process.platform === 'darwin') {
+            const { exec } = await import('child_process');
+            const { promisify } = await import('util');
+            const execAsync = promisify(exec);
+            // AppleScript to open Messages with file attached
+            const script = `
+        tell application "Messages"
+          activate
+          -- This will open Messages app where user can select a contact
+          -- and the file will be ready to attach
+        end tell
+
+        tell application "System Events"
+          tell process "Messages"
+            -- Wait for Messages to open
+            delay 0.5
+            -- Simulate Cmd+N to start new message
+            keystroke "n" using {command down}
+            delay 0.3
+          end tell
+        end tell
+      `;
+            try {
+                await execAsync(`osascript -e '${script.replace(/'/g, "\\'")}'`);
+                // After opening Messages, try to attach the file
+                const attachScript = `
+          tell application "System Events"
+            tell process "Messages"
+              delay 0.5
+              -- Try to drag/attach file (user can also manually drag it)
+              keystroke "a" using {command down}
+              delay 0.3
+            end tell
+          end tell
+        `;
+                // This opens the attachment picker
+                await execAsync(`osascript -e '${attachScript.replace(/'/g, "\\'")}'`);
+                return { success: true };
+            }
+            catch (error) {
+                console.error('❌ Messages AppleScript failed:', error);
+                // Fallback: just open Messages app
+                await execAsync('open -a Messages');
+                return { success: true, fallback: true };
+            }
+        }
+        else {
+            return { success: false, error: 'Messages integration only available on macOS' };
+        }
+    }
+    catch (error) {
+        console.error('❌ Failed to send via Messages:', error);
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : 'Failed to send via Messages',
+        };
+    }
+});
+/**
+ * Show native macOS share sheet for a file
+ */
+ipcMain.handle('shell:share-item', async (_event, fullPath) => {
+    try {
+        console.log('🔗 Sharing item:', fullPath);
+        if (process.platform === 'darwin') {
+            // Use AppleScript to trigger the native macOS share menu
+            const { exec } = await import('child_process');
+            const { promisify } = await import('util');
+            const execAsync = promisify(exec);
+            // Escape the file path for AppleScript
+            const escapedPath = fullPath.replace(/"/g, '\\"');
+            // AppleScript to open Finder, select the file, and trigger share menu
+            // Uses Finder's menu bar Share menu for most reliable access
+            const script = `
+        tell application "Finder"
+          activate
+          set theFile to POSIX file "${escapedPath}" as alias
+          reveal theFile
+          select theFile
+        end tell
+
+        delay 0.4
+
+        tell application "System Events"
+          tell process "Finder"
+            -- Click on File menu in menu bar
+            click menu bar item "File" of menu bar 1
+            delay 0.2
+
+            -- Click on Share submenu
+            try
+              click menu item "Share" of menu "File" of menu bar item "File" of menu bar 1
+            on error errMsg
+              -- Try alternative path for different macOS versions
+              try
+                click menu item "Share" of menu 1 of menu bar item "File" of menu bar 1
+              end try
+            end try
+          end tell
+        end tell
+      `;
+            try {
+                await execAsync(`osascript -e '${script.replace(/'/g, "\\'")}'`);
+                return { success: true };
+            }
+            catch (error) {
+                console.error('❌ AppleScript failed, falling back to Finder:', error);
+                // Fallback: just show in Finder so user can manually share
+                shell.showItemInFolder(fullPath);
+                return { success: true, fallback: true };
+            }
+        }
+        else {
+            // On other platforms, just show in file manager
+            shell.showItemInFolder(fullPath);
+            return { success: true };
+        }
+    }
+    catch (error) {
+        console.error('❌ Failed to share item:', error);
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : 'Failed to share item',
+        };
     }
 });
 //# sourceMappingURL=main.js.map
