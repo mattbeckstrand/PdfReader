@@ -23,6 +23,8 @@ export const TextField: React.FC<TextFieldProps> = ({
         value={value}
         placeholder={placeholder}
         onChange={e => onChange(e.target.value)}
+        spellCheck={false}
+        autoComplete="off"
       />
     </div>
   );
