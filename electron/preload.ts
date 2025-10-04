@@ -55,6 +55,7 @@ interface ElectronAPI {
     openExternal: (url: string) => Promise<void>;
     openOAuthModal: (url: string) => Promise<void>;
     onOAuthCallback: (callback: (data: { url: string }) => void) => () => void;
+    onCheckoutComplete: (callback: (data: { success: boolean }) => void) => () => void;
   };
 
   // Shell operations
@@ -241,6 +242,13 @@ const electronAPI: ElectronAPI = {
       ipcRenderer.on('oauth-callback', listener);
       return () => {
         ipcRenderer.removeListener('oauth-callback', listener);
+      };
+    },
+    onCheckoutComplete: (callback: (data: { success: boolean }) => void) => {
+      const listener = (_event: any, data: { success: boolean }) => callback(data);
+      ipcRenderer.on('checkout-complete', listener);
+      return () => {
+        ipcRenderer.removeListener('checkout-complete', listener);
       };
     },
   },

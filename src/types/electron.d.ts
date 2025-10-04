@@ -99,6 +99,7 @@ export interface ElectronAPI {
     openExternal: (url: string) => Promise<void>;
     openOAuthModal: (url: string) => Promise<void>;
     onOAuthCallback: (callback: (data: { url: string }) => void) => () => void;
+    onCheckoutComplete: (callback: (data: { success: boolean }) => void) => () => void;
   };
 
   // Shell operations
