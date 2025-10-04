@@ -4,9 +4,13 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist/legacy/build/pdf';
 
 import { Moon, PanelLeftClose, PanelLeftOpen, Sun } from 'lucide-react';
+import { useHighlights } from '../hooks/useHighlights';
 import type { RegionSelection } from '../types';
+import { HighlightColorPicker, type HighlightColor } from './HighlightColorPicker';
+import { IconChevronDown, IconHighlight, IconShare } from './Icons';
 import { PageThumbnailSidebar } from './PageThumbnailSidebar';
 import PdfPage from './PdfPage';
+import { ShareDropdown } from './ShareDropdown';
 
 // ===================================================================
 // Component Props Interface
@@ -25,8 +29,11 @@ interface PdfViewerProps {
   onRegionSelected?: (selection: RegionSelection) => void;
   onToggleChat?: () => void;
   documentMenuSlot?: React.ReactNode;
+  documentId?: string | null;
   theme?: 'light' | 'dark';
   onThemeToggle?: () => void;
+  highlightModeActive?: boolean;
+  onHighlightModeChange?: (active: boolean) => void;
 }
 
 // ===================================================================
@@ -58,6 +65,7 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
   onRegionSelected,
   onToggleChat,
   documentMenuSlot,
+  documentId,
   theme,
   onThemeToggle,
 }) => {
@@ -89,6 +97,33 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
     const saved = localStorage.getItem('pdfViewer.sidebarWidth');
     return saved !== null ? parseInt(saved, 10) : 200; // Default to 200px
   });
+
+  // Zoom level with localStorage persistence
+  const [zoom, setZoom] = useState(() => {
+    const saved = localStorage.getItem('pdfViewer.zoom');
+    return saved !== null ? parseFloat(saved) : 1.0; // Default to 100%
+  });
+
+  // Share dropdown state
+  const [shareDropdownOpen, setShareDropdownOpen] = useState(false);
+  const shareButtonRef = useRef<HTMLButtonElement>(null);
+
+  // Highlight color picker state
+  const [highlightPickerOpen, setHighlightPickerOpen] = useState(false);
+  const [highlightModeActive, setHighlightModeActive] = useState(false);
+  const [selectedHighlightColor, setSelectedHighlightColor] = useState<HighlightColor>(() => {
+    const saved = localStorage.getItem('pdfViewer.highlightColor');
+    return (saved as HighlightColor) || 'yellow';
+  });
+  const highlightButtonRef = useRef<HTMLButtonElement>(null);
+
+  // PDF path (for sharing)
+  const pdfPath = localStorage.getItem('lastPdfPath') || undefined;
+
+  // Highlights management
+  const { highlights, addHighlight, getHighlightsForPage, removeHighlight } = useHighlights(
+    documentId || null
+  );
 
   // ===================================================================
   // Measure Container Width
@@ -135,6 +170,111 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
   }, [sidebarWidth]);
 
   /**
+   * Persist zoom level to localStorage
+   */
+  useEffect(() => {
+    localStorage.setItem('pdfViewer.zoom', zoom.toString());
+  }, [zoom]);
+
+  /**
+   * Persist highlight color to localStorage
+   */
+  useEffect(() => {
+    localStorage.setItem('pdfViewer.highlightColor', selectedHighlightColor);
+  }, [selectedHighlightColor]);
+
+  /**
+   * Handle Escape key to exit highlight mode
+   */
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && highlightModeActive) {
+        setHighlightModeActive(false);
+        setHighlightPickerOpen(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [highlightModeActive]);
+
+  /**
+   * Handle text highlighting via keyboard shortcut (Cmd/Ctrl+H)
+   */
+  const handleHighlightText = useCallback(() => {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0 || selection.toString().trim().length === 0) {
+      return;
+    }
+
+    // Get the selected text and its bounding rectangles
+    const range = selection.getRangeAt(0);
+    const rects = Array.from(range.getClientRects());
+    const text = selection.toString().trim();
+
+    // Try to find which page the selection is on
+    let pageNumber = currentPage;
+    let pageContainer: HTMLElement | null = null;
+    const commonAncestor = range.commonAncestorContainer;
+    const parentElement = commonAncestor.parentElement;
+
+    if (parentElement) {
+      // Look for page number in parent elements
+      let element: HTMLElement | null = parentElement;
+      while (element) {
+        const pageAttr = element.getAttribute('data-page-number');
+        if (pageAttr) {
+          pageNumber = parseInt(pageAttr, 10);
+          pageContainer = element;
+          break;
+        }
+        element = element.parentElement;
+      }
+    }
+
+    // Convert client rects to page-relative coordinates and filter out artifacts
+    const pageRect = pageContainer?.getBoundingClientRect();
+    const MIN_RECT_WIDTH = 2; // Minimum width in pixels (filters out line breaks and empty fragments)
+    const MIN_RECT_HEIGHT = 4; // Minimum height in pixels
+
+    const relativeRects = rects
+      .filter(rect => {
+        // Filter out tiny rectangles that are layout artifacts
+        // These are often line breaks, empty spans, or container boxes
+        return rect.width >= MIN_RECT_WIDTH && rect.height >= MIN_RECT_HEIGHT;
+      })
+      .map(rect => {
+        const relativeX = pageRect ? (rect.left - pageRect.left) / zoom : rect.left / zoom;
+        const relativeY = pageRect ? (rect.top - pageRect.top) / zoom : rect.top / zoom;
+
+        return {
+          x: relativeX,
+          y: relativeY,
+          width: rect.width / zoom,
+          height: rect.height / zoom,
+        };
+      });
+
+    // Only add highlight if we have valid rectangles
+    if (relativeRects.length === 0) {
+      console.warn('No valid rectangles found for selection');
+      selection.removeAllRanges();
+      return;
+    }
+
+    // Add the highlight
+    addHighlight({
+      pageNumber,
+      color: selectedHighlightColor,
+      text,
+      rects: relativeRects,
+    });
+
+    // Clear selection
+    selection.removeAllRanges();
+  }, [currentPage, selectedHighlightColor, addHighlight, zoom]);
+
+  /**
    * Toggle sidebar visibility
    */
   const handleToggleSidebar = useCallback(() => {
@@ -161,6 +301,21 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
     },
     [onSetCurrentPage]
   );
+
+  /**
+   * Zoom control functions
+   */
+  const handleZoomIn = useCallback(() => {
+    setZoom(prev => Math.min(prev + 0.1, 3.0)); // Max 300%
+  }, []);
+
+  const handleZoomOut = useCallback(() => {
+    setZoom(prev => Math.max(prev - 0.1, 0.5)); // Min 50%
+  }, []);
+
+  const handleResetZoom = useCallback(() => {
+    setZoom(1.0);
+  }, []);
 
   // ===================================================================
   // Event Handlers
@@ -327,7 +482,7 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
   }, [visiblePages, currentPage, onSetCurrentPage]);
 
   /**
-   * Keyboard shortcuts for navigation
+   * Keyboard shortcuts for navigation and zoom
    */
   useEffect(() => {
     if (!pdfDocument) return;
@@ -335,6 +490,31 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
     const handleKeyDown = (event: KeyboardEvent) => {
       // Don't interfere with input fields
       if (event.target instanceof HTMLInputElement) return;
+
+      // Zoom shortcuts (Cmd/Ctrl + Plus/Minus/0)
+      if (event.metaKey || event.ctrlKey) {
+        if (event.key === '=' || event.key === '+') {
+          event.preventDefault();
+          handleZoomIn();
+          return;
+        }
+        if (event.key === '-' || event.key === '_') {
+          event.preventDefault();
+          handleZoomOut();
+          return;
+        }
+        if (event.key === '0') {
+          event.preventDefault();
+          handleResetZoom();
+          return;
+        }
+        // Highlight shortcut (Cmd/Ctrl + H)
+        if (event.key === 'h' || event.key === 'H') {
+          event.preventDefault();
+          handleHighlightText();
+          return;
+        }
+      }
 
       const scrollToPage = (pageNum: number) => {
         const pageElement = pageRefsMap.current.get(pageNum);
@@ -390,7 +570,47 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [pdfDocument, currentPage, totalPages]);
+  }, [
+    pdfDocument,
+    currentPage,
+    totalPages,
+    handleZoomIn,
+    handleZoomOut,
+    handleResetZoom,
+    handleHighlightText,
+  ]);
+
+  /**
+   * Trackpad pinch-to-zoom handler
+   * Listens for wheel events with Ctrl/Cmd key (pinch gesture on trackpads)
+   */
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    const handleWheel = (event: WheelEvent) => {
+      // Check if this is a pinch-zoom gesture (Ctrl/Cmd + wheel)
+      if (event.ctrlKey || event.metaKey) {
+        event.preventDefault();
+
+        // Calculate zoom delta (negative deltaY = zoom in, positive = zoom out)
+        const delta = -event.deltaY;
+        const zoomSpeed = 0.01; // Adjust sensitivity
+        const zoomDelta = delta * zoomSpeed;
+
+        setZoom(prev => {
+          const newZoom = prev + zoomDelta;
+          return Math.max(0.5, Math.min(3.0, newZoom)); // Clamp between 50% and 300%
+        });
+      }
+    };
+
+    const container = containerRef.current;
+    container.addEventListener('wheel', handleWheel, { passive: false });
+
+    return () => {
+      container.removeEventListener('wheel', handleWheel);
+    };
+  }, []);
 
   // ===================================================================
   // Render
@@ -468,6 +688,120 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
           {documentMenuSlot}
         </div>
 
+        {/* Center Controls - Share and Highlight (only visible when PDF is loaded) */}
+        {pdfDocument && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginLeft: 'auto' }}>
+            {/* Share Button */}
+            <div style={{ position: 'relative' }}>
+              <button
+                ref={shareButtonRef}
+                onClick={() => setShareDropdownOpen(!shareDropdownOpen)}
+                className="btn"
+                style={{
+                  padding: '8px 14px',
+                  fontSize: '13px',
+                  fontWeight: '400',
+                  cursor: 'pointer',
+                  border: '1px solid var(--stroke-1)',
+                  borderRadius: 'var(--radius-md)',
+                  backgroundColor: shareDropdownOpen ? 'var(--surface-3)' : 'transparent',
+                  color: 'var(--text-1)',
+                  transition: 'all 0.15s ease',
+                  letterSpacing: '0.3px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                }}
+                onMouseEnter={e => {
+                  if (!shareDropdownOpen) {
+                    e.currentTarget.style.backgroundColor = 'var(--surface-3)';
+                  }
+                }}
+                onMouseLeave={e => {
+                  if (!shareDropdownOpen) {
+                    e.currentTarget.style.backgroundColor = 'transparent';
+                  }
+                }}
+                title="Share PDF"
+              >
+                <IconShare size={16} />
+                <span>Share</span>
+                <IconChevronDown size={14} />
+              </button>
+              <ShareDropdown
+                pdfPath={pdfPath}
+                isOpen={shareDropdownOpen}
+                onClose={() => setShareDropdownOpen(false)}
+                buttonRef={shareButtonRef}
+              />
+            </div>
+
+            {/* Highlight Color Picker Button */}
+            <div style={{ position: 'relative' }}>
+              <button
+                ref={highlightButtonRef}
+                onClick={e => {
+                  // Regular click opens color picker
+                  setHighlightPickerOpen(!highlightPickerOpen);
+                }}
+                className="btn"
+                style={{
+                  padding: '8px 12px',
+                  fontSize: '13px',
+                  fontWeight: '500',
+                  cursor: 'pointer',
+                  border: `1px solid ${highlightModeActive ? 'var(--accent)' : 'var(--stroke-1)'}`,
+                  borderRadius: 'var(--radius-md)',
+                  backgroundColor: highlightModeActive
+                    ? 'var(--accent-bg)'
+                    : highlightPickerOpen
+                    ? 'var(--surface-3)'
+                    : 'transparent',
+                  color: highlightModeActive ? 'var(--accent)' : 'var(--text-1)',
+                  transition: 'all 0.15s ease',
+                  letterSpacing: '0.3px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+                onMouseEnter={e => {
+                  if (!highlightPickerOpen && !highlightModeActive) {
+                    e.currentTarget.style.backgroundColor = 'var(--surface-3)';
+                  }
+                }}
+                onMouseLeave={e => {
+                  if (!highlightPickerOpen && !highlightModeActive) {
+                    e.currentTarget.style.backgroundColor = 'transparent';
+                  }
+                }}
+                title={
+                  highlightModeActive
+                    ? 'Highlight mode ON (press Esc to exit)'
+                    : 'Highlight text (⌘H)'
+                }
+              >
+                <IconHighlight size={16} />
+              </button>
+              <HighlightColorPicker
+                selectedColor={selectedHighlightColor}
+                onColorSelect={color => {
+                  setSelectedHighlightColor(color);
+                  // When a color is selected, activate highlight mode
+                  setHighlightModeActive(true);
+                }}
+                isOpen={highlightPickerOpen}
+                onClose={() => setHighlightPickerOpen(false)}
+                buttonRef={highlightButtonRef}
+                onDisableMode={() => {
+                  setHighlightModeActive(false);
+                  setHighlightPickerOpen(false);
+                }}
+                highlightModeActive={highlightModeActive}
+              />
+            </div>
+          </div>
+        )}
+
         {/* Navigation Controls (only visible when PDF is loaded) */}
         {pdfDocument && (
           <>
@@ -523,7 +857,7 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
         )}
 
         {/* Right side controls */}
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           {/* Theme Toggle Button */}
           {theme && onThemeToggle && (
             <button
@@ -784,6 +1118,9 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
               maxWidth: '900px',
               display: 'flex',
               flexDirection: 'column',
+              transform: `scale(${zoom})`,
+              transformOrigin: 'top center',
+              transition: 'transform 0.1s ease-out',
             }}
           >
             {allPageObjects.map((pageObject, index) => (
@@ -796,6 +1133,12 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
                 onVisibilityChange={handlePageVisibilityChange}
                 onCanvasReady={onCanvasReady}
                 onRegionSelected={onRegionSelected}
+                highlights={highlights}
+                onRemoveHighlight={removeHighlight}
+                highlightModeActive={highlightModeActive}
+                highlightColor={selectedHighlightColor}
+                onTextHighlight={addHighlight}
+                zoom={zoom}
               />
             ))}
           </div>
@@ -883,6 +1226,16 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
           z-index: 2;
           -webkit-font-smoothing: antialiased;
           -moz-osx-font-smoothing: grayscale;
+        }
+
+        /* Highlight mode cursor - makes it clear you're in highlighting mode */
+        .textLayer.highlight-active {
+          cursor: crosshair;
+        }
+
+        .textLayer.highlight-active span,
+        .textLayer.highlight-active div:not(.endOfContent) {
+          cursor: crosshair;
         }
 
         /* Ensure ALL text elements (spans and divs) are properly styled */

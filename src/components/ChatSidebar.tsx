@@ -66,7 +66,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
   const [isContextHovered, setIsContextHovered] = useState(false);
 
   // Resize and position state
-  const [chatSize, setChatSize] = useState({ width: 450, height: 600 });
+  const [chatSize, setChatSize] = useState({ width: 225, height: 600 });
   const [chatPosition, setChatPosition] = useState({ bottom: 24, right: 24 });
   const isResizingRef = useRef(false);
   const isDraggingRef = useRef(false);
@@ -80,7 +80,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
         const deltaX = resizeStartRef.current.x - e.clientX;
         const deltaY = resizeStartRef.current.y - e.clientY;
 
-        const newWidth = Math.max(350, Math.min(800, resizeStartRef.current.width + deltaX));
+        const newWidth = Math.max(200, Math.min(800, resizeStartRef.current.width + deltaX));
         const newHeight = Math.max(400, Math.min(900, resizeStartRef.current.height + deltaY));
 
         setChatSize({ width: newWidth, height: newHeight });
