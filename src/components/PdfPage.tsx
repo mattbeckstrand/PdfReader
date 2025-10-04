@@ -23,6 +23,7 @@ interface PdfPageProps {
   highlightColor?: string;
   onTextHighlight?: (highlight: Omit<HighlightData, 'id' | 'timestamp'>) => void;
   zoom?: number;
+  orientation?: number;
 }
 
 // ===================================================================
@@ -78,6 +79,7 @@ const PdfPage: React.FC<PdfPageProps> = ({
   highlightColor = 'yellow',
   onTextHighlight,
   zoom = 1,
+  orientation = 0,
 }) => {
   // ===================================================================
   // Refs
@@ -109,13 +111,13 @@ const PdfPage: React.FC<PdfPageProps> = ({
    * Calculate page height without rendering (for placeholders)
    */
   useEffect(() => {
-    if (containerWidth > 0 && pageHeight === null) {
-      const viewport = page.getViewport({ scale: 1.0 });
+    if (containerWidth > 0) {
+      const viewport = page.getViewport({ scale: 1.0, rotation: orientation });
       const calculatedScale = containerWidth / viewport.width;
-      const scaledViewport = page.getViewport({ scale: calculatedScale });
+      const scaledViewport = page.getViewport({ scale: calculatedScale, rotation: orientation });
       setPageHeight(scaledViewport.height);
     }
-  }, [page, containerWidth, pageHeight]);
+  }, [page, containerWidth, orientation]);
 
   // ===================================================================
   // Page Rendering
@@ -150,9 +152,9 @@ const PdfPage: React.FC<PdfPageProps> = ({
       textLayer.innerHTML = '';
 
       // Calculate responsive scale to fit container
-      const viewport = page.getViewport({ scale: 1.0 });
+      const viewport = page.getViewport({ scale: 1.0, rotation: orientation });
       const calculatedScale = containerWidth / viewport.width;
-      const scaledViewport = page.getViewport({ scale: calculatedScale });
+      const scaledViewport = page.getViewport({ scale: calculatedScale, rotation: orientation });
 
       // Store scale factor for coordinate conversion (OCR needs this)
       setScaleFactor(calculatedScale);
@@ -258,7 +260,7 @@ const PdfPage: React.FC<PdfPageProps> = ({
     } catch (err) {
       console.error(`❌ Failed to render page ${pageNumber}:`, err);
     }
-  }, [page, pageNumber, containerWidth, onCanvasReady]);
+  }, [page, pageNumber, containerWidth, orientation, onCanvasReady]);
 
   // ===================================================================
   // Effects
@@ -305,6 +307,17 @@ const PdfPage: React.FC<PdfPageProps> = ({
       renderPage();
     }
   }, [isVisible, containerWidth, isRendered, renderPage]);
+
+  /**
+   * Force re-render when orientation changes (for already rendered pages)
+   */
+  useEffect(() => {
+    if (isRendered && isVisible && containerWidth > 0) {
+      // Reset render state to trigger re-render
+      hasRenderedRef.current = false;
+      setIsRendered(false);
+    }
+  }, [orientation]);
 
   /**
    * Pass ref to parent for scroll management
