@@ -78,6 +78,15 @@ const App: React.FC = () => {
    * Check subscription status when auth changes
    */
   useEffect(() => {
+    const devBypassPayments = import.meta.env['VITE_DEV_BYPASS_PAYMENTS'] === 'true';
+
+    if (devBypassPayments) {
+      // Complete bypass in development mode
+      console.log('🚀 Development mode: Complete payment bypass enabled');
+      setHasActiveSubscription(true);
+      return;
+    }
+
     if (!authLoading && user && session) {
       checkSubscription();
     } else if (!authLoading && !user) {
@@ -696,8 +705,10 @@ const App: React.FC = () => {
     return <SignUp onSignUp={handleSignUp} onSwitchToSignIn={() => setAuthView('signin')} />;
   }
 
-  // Signed in but no subscription - show paywall
-  if (!hasActiveSubscription) {
+  // Signed in but no subscription - show paywall (unless bypassed in dev)
+  const devBypassPayments = import.meta.env['VITE_DEV_BYPASS_PAYMENTS'] === 'true';
+
+  if (!hasActiveSubscription && !devBypassPayments) {
     return (
       <Paywall
         onHaveLicense={() => checkSubscription()} // Refresh subscription after purchase

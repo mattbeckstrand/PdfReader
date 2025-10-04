@@ -20,6 +20,10 @@ MATHPIX_APP_KEY=your_mathpix_app_key
 # Backend API URL (for license verification)
 BACKEND_API_URL=http://localhost:3001
 
+# Development bypass for payments (set to 'true' to skip paywall during development)
+# WARNING: Only use this for development, never in production!
+VITE_DEV_BYPASS_PAYMENTS=false
+
 # Stripe Price IDs (for payment wall)
 VITE_STRIPE_PRICE_LIFETIME=price_xxx_replace_with_real_id
 # VITE_STRIPE_PRICE_MONTHLY=price_yyy_replace_with_real_id
@@ -66,6 +70,7 @@ cat > .env << 'EOF'
 VITE_GEMINI_API_KEY=your_gemini_api_key_here
 VITE_GEMINI_MODEL=gemini-1.5-flash
 BACKEND_API_URL=http://localhost:3001
+VITE_DEV_BYPASS_PAYMENTS=true
 VITE_STRIPE_PRICE_LIFETIME=price_xxx
 EOF
 
