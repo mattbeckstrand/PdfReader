@@ -50,6 +50,13 @@ const electronAPI = {
                 electron_1.ipcRenderer.removeListener('oauth-callback', listener);
             };
         },
+        onCheckoutComplete: (callback) => {
+            const listener = (_event, data) => callback(data);
+            electron_1.ipcRenderer.on('checkout-complete', listener);
+            return () => {
+                electron_1.ipcRenderer.removeListener('checkout-complete', listener);
+            };
+        },
     },
     shell: {
         showItemInFolder: (fullPath) => electron_1.ipcRenderer.invoke('shell:show-item-in-folder', fullPath),
