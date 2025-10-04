@@ -42,9 +42,26 @@ const electronAPI = {
     system: {
         platform: process.platform,
         openExternal: (url) => electron_1.ipcRenderer.invoke('system:open-external', url),
+        openOAuthModal: (url) => electron_1.ipcRenderer.invoke('system:open-oauth-modal', url),
+        onOAuthCallback: (callback) => {
+            const listener = (_event, data) => callback(data);
+            electron_1.ipcRenderer.on('oauth-callback', listener);
+            return () => {
+                electron_1.ipcRenderer.removeListener('oauth-callback', listener);
+            };
+        },
     },
     extract: {
         region: (pdfPath, pageNumber, bbox, pythonPath) => electron_1.ipcRenderer.invoke('extract:region', { pdfPath, pageNumber, bbox, pythonPath }),
+    },
+    license: {
+        verify: (licenseKey) => electron_1.ipcRenderer.invoke('license:verify', licenseKey),
+        activate: (licenseKey, email) => electron_1.ipcRenderer.invoke('license:activate', { licenseKey, email }),
+        getStored: () => electron_1.ipcRenderer.invoke('license:get-stored'),
+        store: (licenseKey, email) => electron_1.ipcRenderer.invoke('license:store', { licenseKey, email }),
+        clear: () => electron_1.ipcRenderer.invoke('license:clear'),
+        createCheckout: (priceId, email) => electron_1.ipcRenderer.invoke('license:create-checkout', { priceId, email }),
+        getByEmail: (email) => electron_1.ipcRenderer.invoke('license:get-by-email', email),
     },
 };
 // ============================================================================

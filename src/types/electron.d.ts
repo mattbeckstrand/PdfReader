@@ -28,6 +28,33 @@ export interface ConversationMessage {
   pageNumber?: number;
 }
 
+export interface LicenseStatus {
+  valid: boolean;
+  email?: string;
+  activatedAt?: string;
+  expiresAt?: string | null;
+  plan?: 'lifetime' | 'monthly' | 'yearly';
+  error?: string;
+}
+
+export interface ActivateLicenseResponse {
+  success: boolean;
+  license?: LicenseStatus;
+  error?: string;
+}
+
+export interface StoredLicense {
+  licenseKey: string;
+  email: string;
+}
+
+export interface CreateCheckoutResponse {
+  success: boolean;
+  checkoutUrl?: string;
+  sessionId?: string;
+  error?: string;
+}
+
 export interface ElectronAPI {
   // PDF operations
   pdf: {
@@ -70,6 +97,8 @@ export interface ElectronAPI {
   system: {
     platform: NodeJS.Platform;
     openExternal: (url: string) => Promise<void>;
+    openOAuthModal: (url: string) => Promise<void>;
+    onOAuthCallback: (callback: (data: { url: string }) => void) => () => void;
   };
 
   // Extraction
@@ -84,6 +113,23 @@ export interface ElectronAPI {
       text?: string;
       latex?: string;
       source?: string;
+      error?: string;
+    }>;
+  };
+
+  // License & Payment
+  license: {
+    verify: (licenseKey: string) => Promise<LicenseStatus>;
+    activate: (licenseKey: string, email: string) => Promise<ActivateLicenseResponse>;
+    getStored: () => Promise<StoredLicense | null>;
+    store: (licenseKey: string, email: string) => Promise<void>;
+    clear: () => Promise<void>;
+    createCheckout: (priceId: string, email: string) => Promise<CreateCheckoutResponse>;
+    getByEmail: (email: string) => Promise<{
+      success: boolean;
+      licenseKey?: string;
+      email?: string;
+      plan?: string;
       error?: string;
     }>;
   };

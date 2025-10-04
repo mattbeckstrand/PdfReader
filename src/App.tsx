@@ -4,8 +4,12 @@ import { ChatMessage, ChatSidebar } from './components/ChatSidebar';
 import { DocumentMenu } from './components/DocumentMenu';
 import { IconHome } from './components/Icons';
 import { LibraryView } from './components/LibraryView';
+import { Paywall } from './components/Paywall';
 import PdfViewer from './components/PdfViewer';
+import { SignIn } from './components/SignIn';
+import { SignUp } from './components/SignUp';
 import { useContextualChunks } from './features/contextual-chunking/useContextualChunks';
+import { useAuth } from './hooks/useAuth';
 import { useLibrary } from './hooks/useLibrary';
 import { usePdfDocument } from './hooks/usePdfDocument';
 import { useTheme } from './hooks/useTheme';
@@ -23,6 +27,9 @@ const App: React.FC = () => {
   // ===================================================================
 
   const { theme, toggleTheme } = useTheme();
+
+  // Auth hook
+  const { user, session, loading: authLoading, signUp, signIn, signOut } = useAuth();
 
   const {
     currentPage,
@@ -47,6 +54,10 @@ const App: React.FC = () => {
   // State
   // ===================================================================
 
+  // Auth/Subscription state
+  const [hasActiveSubscription, setHasActiveSubscription] = useState<boolean | null>(null);
+  const [authView, setAuthView] = useState<'signup' | 'signin' | 'paywall'>('signup');
+
   const [currentView, setCurrentView] = useState<AppView>('library');
   const [currentDocumentId, setCurrentDocumentId] = useState<string | null>(null);
   const [lastSelection, setLastSelection] = useState<RegionSelection | null>(null);
@@ -58,6 +69,79 @@ const App: React.FC = () => {
     source?: string;
     error?: string;
   }>({ loading: false });
+
+  // ===================================================================
+  // Subscription Verification
+  // ===================================================================
+
+  /**
+   * Check subscription status when auth changes
+   */
+  useEffect(() => {
+    if (!authLoading && user && session) {
+      checkSubscription();
+    } else if (!authLoading && !user) {
+      setHasActiveSubscription(false);
+    }
+  }, [user, session, authLoading]);
+
+  async function checkSubscription() {
+    if (!session) {
+      setHasActiveSubscription(false);
+      return;
+    }
+
+    try {
+      console.log('🔍 Checking subscription status...');
+
+      const response = await fetch(
+        `${
+          import.meta.env['VITE_BACKEND_API_URL'] || 'http://localhost:3001'
+        }/api/subscription/status`,
+        {
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+          },
+        }
+      );
+
+      const data = await response.json();
+
+      if (data.active) {
+        console.log('✅ Active subscription found:', data.plan);
+        setHasActiveSubscription(true);
+      } else {
+        console.log('❌ No active subscription');
+        setHasActiveSubscription(false);
+      }
+    } catch (error) {
+      console.error('❌ Subscription check failed:', error);
+      setHasActiveSubscription(false);
+    }
+  }
+
+  // Auth handlers
+  async function handleSignUp(email: string, password: string) {
+    const result = await signUp(email, password);
+    if (!result.error && result.data?.session) {
+      // Only redirect to paywall if we have a session (email confirmation disabled)
+      setAuthView('paywall');
+    }
+    // If no session, email confirmation is required - SignUp component shows message
+    return result;
+  }
+
+  async function handleSignIn(email: string, password: string) {
+    const result = await signIn(email, password);
+    // After signin, useEffect will check subscription
+    return result;
+  }
+
+  async function handleSignOut() {
+    await signOut();
+    setHasActiveSubscription(false);
+    setAuthView('signin');
+  }
 
   const handleClearContext = useCallback(() => {
     setLastSelection(null);
@@ -577,6 +661,56 @@ const App: React.FC = () => {
     await handleAddDocumentFromLibrary();
   }, [handleAddDocumentFromLibrary]);
 
+  // ===================================================================
+  // Auth & Subscription Flow Rendering
+  // ===================================================================
+
+  // Loading authentication state
+  if (authLoading || hasActiveSubscription === null) {
+    return (
+      <div
+        style={{
+          height: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: 'var(--surface-1)',
+          color: 'var(--text-1)',
+        }}
+      >
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: '18px', marginBottom: '16px' }}>Loading...</div>
+          <div style={{ fontSize: '14px', color: 'var(--text-2)' }}>
+            {authLoading ? 'Checking authentication...' : 'Verifying subscription...'}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Not signed in - show auth screens
+  if (!user) {
+    if (authView === 'signin') {
+      return <SignIn onSignIn={handleSignIn} onSwitchToSignUp={() => setAuthView('signup')} />;
+    }
+    return <SignUp onSignUp={handleSignUp} onSwitchToSignIn={() => setAuthView('signin')} />;
+  }
+
+  // Signed in but no subscription - show paywall
+  if (!hasActiveSubscription) {
+    return (
+      <Paywall
+        onHaveLicense={() => checkSubscription()} // Refresh subscription after purchase
+        userEmail={user.email || ''}
+        onSignOut={handleSignOut}
+      />
+    );
+  }
+
+  // ===================================================================
+  // Main App (License Valid)
+  // ===================================================================
+
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
       {/* Main Content Area - No top bar needed! */}
@@ -587,6 +721,8 @@ const App: React.FC = () => {
             documents={documents}
             onOpenDocument={handleOpenDocumentFromLibrary}
             onAddDocument={handleAddDocumentFromLibrary}
+            onSignOut={handleSignOut}
+            userEmail={user?.email}
           />
         )}
 
