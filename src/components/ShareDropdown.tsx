@@ -1,4 +1,4 @@
-import { Copy, Link as LinkIcon, Mail, Share2 } from 'lucide-react';
+import { Copy, Mail, MessageSquare, Share, StickyNote } from 'lucide-react';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 
 // ===================================================================
@@ -92,15 +92,36 @@ export const ShareDropdown: React.FC<ShareDropdownProps> = ({
     }
   }, [pdfPath, handleCopyPath]);
 
-  // Handle share via system dialog (macOS/Windows)
-  const handleSystemShare = useCallback(async () => {
+  // Handle send via Messages
+  const handleMessages = useCallback(async () => {
     if (!pdfPath) return;
     try {
-      // Use Electron shell to show file in folder (closest to system share)
-      await window.electronAPI.shell.showItemInFolder(pdfPath);
+      const result = await window.electronAPI.shell.sendViaMessages(pdfPath);
+      if (result.success) {
+        console.log('💬 Messages opened', result.fallback ? '(fallback)' : '');
+      }
       onClose();
     } catch (error) {
-      console.error('Failed to open system share:', error);
+      console.error('Failed to open Messages:', error);
+      onClose();
+    }
+  }, [pdfPath, onClose]);
+
+  // Handle native macOS/system share
+  const handleNativeShare = useCallback(async () => {
+    if (!pdfPath) return;
+    try {
+      // Use native macOS share sheet
+      const result = await window.electronAPI.shell.shareItem(pdfPath);
+      if (result.success) {
+        console.log('📤 Share sheet opened', result.fallback ? '(via Finder fallback)' : '');
+      }
+      onClose();
+    } catch (error) {
+      console.error('Failed to open share menu:', error);
+      // Fallback to showing in Finder
+      await window.electronAPI.shell.showItemInFolder(pdfPath);
+      onClose();
     }
   }, [pdfPath, onClose]);
 
@@ -109,147 +130,169 @@ export const ShareDropdown: React.FC<ShareDropdownProps> = ({
   return (
     <div
       ref={dropdownRef}
+      className="share-menu"
       style={{
         position: 'absolute',
         top: 'calc(100% + 8px)',
-        left: '50%',
-        transform: 'translateX(-50%)',
-        backgroundColor: 'var(--surface-2)',
+        right: '0',
+        backgroundColor: 'var(--surface-1)',
         border: '1px solid var(--stroke-1)',
-        borderRadius: 'var(--radius-md)',
-        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
-        padding: '8px',
-        minWidth: '220px',
+        borderRadius: '8px',
+        boxShadow: '0 8px 24px rgba(0, 0, 0, 0.12), 0 2px 4px rgba(0, 0, 0, 0.06)',
+        width: '200px',
         zIndex: 1000,
-        animation: 'dropdownFadeIn 0.15s ease-out',
+        animation: 'shareMenuFadeIn 0.15s ease-out',
+        overflow: 'hidden',
       }}
     >
-      {/* Email */}
-      <button
-        onClick={handleEmailShare}
-        style={{
-          width: '100%',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '12px',
-          padding: '10px 12px',
-          border: 'none',
-          borderRadius: '6px',
-          backgroundColor: 'transparent',
-          color: 'var(--text-1)',
-          fontSize: '13px',
-          cursor: 'pointer',
-          textAlign: 'left',
-          transition: 'background-color 0.15s ease',
-        }}
-        onMouseEnter={e => {
-          e.currentTarget.style.backgroundColor = 'var(--surface-3)';
-        }}
-        onMouseLeave={e => {
-          e.currentTarget.style.backgroundColor = 'transparent';
-        }}
-      >
-        <Mail size={16} />
-        <span>Share via Email</span>
-      </button>
+      {/* Share Actions */}
+      <div style={{ padding: '4px' }}>
+        {/* AirDrop */}
+        <button
+          onClick={handleNativeShare}
+          className="share-option"
+          style={{
+            width: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            padding: '8px 12px',
+            border: 'none',
+            borderRadius: '6px',
+            backgroundColor: 'transparent',
+            color: 'var(--text-1)',
+            fontSize: '13px',
+            cursor: 'pointer',
+            textAlign: 'left',
+            transition: 'background-color 0.1s ease',
+            fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif',
+          }}
+        >
+          <Share size={16} color="var(--text-1)" strokeWidth={2} />
+          <span style={{ fontWeight: 400 }}>AirDrop</span>
+        </button>
 
-      {/* Copy Path */}
-      <button
-        onClick={handleCopyPath}
-        style={{
-          width: '100%',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '12px',
-          padding: '10px 12px',
-          border: 'none',
-          borderRadius: '6px',
-          backgroundColor: 'transparent',
-          color: 'var(--text-1)',
-          fontSize: '13px',
-          cursor: 'pointer',
-          textAlign: 'left',
-          transition: 'background-color 0.15s ease',
-        }}
-        onMouseEnter={e => {
-          e.currentTarget.style.backgroundColor = 'var(--surface-3)';
-        }}
-        onMouseLeave={e => {
-          e.currentTarget.style.backgroundColor = 'transparent';
-        }}
-      >
-        <LinkIcon size={16} />
-        <span>{copiedState === 'path' ? '✓ Copied!' : 'Copy File Path'}</span>
-      </button>
+        {/* Mail */}
+        <button
+          onClick={handleEmailShare}
+          className="share-option"
+          style={{
+            width: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            padding: '8px 12px',
+            border: 'none',
+            borderRadius: '6px',
+            backgroundColor: 'transparent',
+            color: 'var(--text-1)',
+            fontSize: '13px',
+            cursor: 'pointer',
+            textAlign: 'left',
+            transition: 'background-color 0.1s ease',
+            fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif',
+          }}
+        >
+          <Mail size={16} color="var(--text-1)" strokeWidth={2} />
+          <span style={{ fontWeight: 400 }}>Mail</span>
+        </button>
 
-      {/* Copy File */}
-      <button
-        onClick={handleCopyFile}
-        style={{
-          width: '100%',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '12px',
-          padding: '10px 12px',
-          border: 'none',
-          borderRadius: '6px',
-          backgroundColor: 'transparent',
-          color: 'var(--text-1)',
-          fontSize: '13px',
-          cursor: 'pointer',
-          textAlign: 'left',
-          transition: 'background-color 0.15s ease',
-        }}
-        onMouseEnter={e => {
-          e.currentTarget.style.backgroundColor = 'var(--surface-3)';
-        }}
-        onMouseLeave={e => {
-          e.currentTarget.style.backgroundColor = 'transparent';
-        }}
-      >
-        <Copy size={16} />
-        <span>{copiedState === 'file' ? '✓ Copied!' : 'Copy to Clipboard'}</span>
-      </button>
+        {/* Messages */}
+        <button
+          onClick={handleMessages}
+          className="share-option"
+          style={{
+            width: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            padding: '8px 12px',
+            border: 'none',
+            borderRadius: '6px',
+            backgroundColor: 'transparent',
+            color: 'var(--text-1)',
+            fontSize: '13px',
+            cursor: 'pointer',
+            textAlign: 'left',
+            transition: 'background-color 0.1s ease',
+            fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif',
+          }}
+        >
+          <MessageSquare size={16} color="var(--text-1)" strokeWidth={2} />
+          <span style={{ fontWeight: 400 }}>Messages</span>
+        </button>
 
-      {/* Show in Finder/Explorer */}
-      <button
-        onClick={handleSystemShare}
-        style={{
-          width: '100%',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '12px',
-          padding: '10px 12px',
-          border: 'none',
-          borderRadius: '6px',
-          backgroundColor: 'transparent',
-          color: 'var(--text-1)',
-          fontSize: '13px',
-          cursor: 'pointer',
-          textAlign: 'left',
-          transition: 'background-color 0.15s ease',
-        }}
-        onMouseEnter={e => {
-          e.currentTarget.style.backgroundColor = 'var(--surface-3)';
-        }}
-        onMouseLeave={e => {
-          e.currentTarget.style.backgroundColor = 'transparent';
-        }}
-      >
-        <Share2 size={16} />
-        <span>Show in Finder</span>
-      </button>
+        {/* Notes */}
+        <button
+          onClick={handleCopyPath}
+          className="share-option"
+          style={{
+            width: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            padding: '8px 12px',
+            border: 'none',
+            borderRadius: '6px',
+            backgroundColor: 'transparent',
+            color: 'var(--text-1)',
+            fontSize: '13px',
+            cursor: 'pointer',
+            textAlign: 'left',
+            transition: 'background-color 0.1s ease',
+            fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif',
+          }}
+        >
+          <StickyNote size={16} color="var(--text-1)" strokeWidth={2} />
+          <span style={{ fontWeight: 400 }}>
+            {copiedState === 'path' ? '✓ Path Copied' : 'Notes'}
+          </span>
+        </button>
+
+        {/* Copy */}
+        <button
+          onClick={handleCopyFile}
+          className="share-option"
+          style={{
+            width: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            padding: '8px 12px',
+            border: 'none',
+            borderRadius: '6px',
+            backgroundColor: 'transparent',
+            color: 'var(--text-1)',
+            fontSize: '13px',
+            cursor: 'pointer',
+            textAlign: 'left',
+            transition: 'background-color 0.1s ease',
+            fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif',
+          }}
+        >
+          <Copy size={16} color="var(--text-1)" strokeWidth={2} />
+          <span style={{ fontWeight: 400 }}>Copy</span>
+        </button>
+      </div>
 
       <style>{`
-        @keyframes dropdownFadeIn {
+        @keyframes shareMenuFadeIn {
           from {
             opacity: 0;
-            transform: translateX(-50%) translateY(-4px);
+            transform: translateY(-4px);
           }
           to {
             opacity: 1;
-            transform: translateX(-50%) translateY(0);
+            transform: translateY(0);
           }
+        }
+
+        .share-option:hover {
+          background-color: var(--surface-3) !important;
+        }
+
+        .share-option:active {
+          background-color: var(--surface-4) !important;
         }
       `}</style>
     </div>

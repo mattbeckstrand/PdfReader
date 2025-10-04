@@ -184,6 +184,21 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
   }, [selectedHighlightColor]);
 
   /**
+   * Handle Escape key to exit highlight mode
+   */
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && highlightModeActive) {
+        setHighlightModeActive(false);
+        setHighlightPickerOpen(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [highlightModeActive]);
+
+  /**
    * Handle text highlighting via keyboard shortcut (Cmd/Ctrl+H)
    */
   const handleHighlightText = useCallback(() => {
@@ -217,19 +232,35 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
       }
     }
 
-    // Convert client rects to page-relative coordinates (accounting for zoom)
+    // Convert client rects to page-relative coordinates and filter out artifacts
     const pageRect = pageContainer?.getBoundingClientRect();
-    const relativeRects = rects.map(rect => {
-      const relativeX = pageRect ? (rect.left - pageRect.left) / zoom : rect.left / zoom;
-      const relativeY = pageRect ? (rect.top - pageRect.top) / zoom : rect.top / zoom;
+    const MIN_RECT_WIDTH = 2; // Minimum width in pixels (filters out line breaks and empty fragments)
+    const MIN_RECT_HEIGHT = 4; // Minimum height in pixels
 
-      return {
-        x: relativeX,
-        y: relativeY,
-        width: rect.width / zoom,
-        height: rect.height / zoom,
-      };
-    });
+    const relativeRects = rects
+      .filter(rect => {
+        // Filter out tiny rectangles that are layout artifacts
+        // These are often line breaks, empty spans, or container boxes
+        return rect.width >= MIN_RECT_WIDTH && rect.height >= MIN_RECT_HEIGHT;
+      })
+      .map(rect => {
+        const relativeX = pageRect ? (rect.left - pageRect.left) / zoom : rect.left / zoom;
+        const relativeY = pageRect ? (rect.top - pageRect.top) / zoom : rect.top / zoom;
+
+        return {
+          x: relativeX,
+          y: relativeY,
+          width: rect.width / zoom,
+          height: rect.height / zoom,
+        };
+      });
+
+    // Only add highlight if we have valid rectangles
+    if (relativeRects.length === 0) {
+      console.warn('No valid rectangles found for selection');
+      selection.removeAllRanges();
+      return;
+    }
 
     // Add the highlight
     addHighlight({
@@ -745,8 +776,8 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
                 }}
                 title={
                   highlightModeActive
-                    ? 'Highlight mode ON (click color to disable)'
-                    : 'Choose highlight color'
+                    ? 'Highlight mode ON (press Esc to exit)'
+                    : 'Highlight text (⌘H)'
                 }
               >
                 <IconHighlight size={16} />
@@ -1195,6 +1226,16 @@ const PdfViewer: React.FC<PdfViewerProps> = ({
           z-index: 2;
           -webkit-font-smoothing: antialiased;
           -moz-osx-font-smoothing: grayscale;
+        }
+
+        /* Highlight mode cursor - makes it clear you're in highlighting mode */
+        .textLayer.highlight-active {
+          cursor: crosshair;
+        }
+
+        .textLayer.highlight-active span,
+        .textLayer.highlight-active div:not(.endOfContent) {
+          cursor: crosshair;
         }
 
         /* Ensure ALL text elements (spans and divs) are properly styled */

@@ -69,10 +69,9 @@ export const IconHome = ({ size, ...rest }: IconProps) => (
 
 export const IconShare = ({ size, ...rest }: IconProps) => (
   <svg {...baseProps(size)} {...rest}>
-    <circle cx="18" cy="5" r="3" />
-    <circle cx="6" cy="12" r="3" />
-    <circle cx="18" cy="19" r="3" />
-    <path d="M8.59 13.51l6.83 3.98M15.41 6.51l-6.82 3.98" />
+    <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+    <polyline points="16 6 12 2 8 6" />
+    <line x1="12" y1="2" x2="12" y2="15" />
   </svg>
 );
 
