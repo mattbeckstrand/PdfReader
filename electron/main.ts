@@ -4,7 +4,7 @@ dotenv.config();
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { spawn } from 'child_process';
-import { app, BrowserWindow, dialog, ipcMain } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import { readFile } from 'fs/promises';
 import * as path from 'path';
 import { dirname } from 'path';
@@ -399,3 +399,158 @@ ipcMain.handle(
     }
   }
 );
+
+/**
+ * Show file in system file manager (Finder on macOS, Explorer on Windows)
+ */
+ipcMain.handle('shell:show-item-in-folder', async (_event, fullPath: string) => {
+  try {
+    console.log('📂 Showing item in folder:', fullPath);
+    shell.showItemInFolder(fullPath);
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Failed to show item in folder:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to show item in folder',
+    };
+  }
+});
+
+/**
+ * Send file via Messages app on macOS
+ */
+ipcMain.handle('shell:send-via-messages', async (_event, fullPath: string) => {
+  try {
+    console.log('💬 Sending via Messages:', fullPath);
+
+    if (process.platform === 'darwin') {
+      const { exec } = await import('child_process');
+      const { promisify } = await import('util');
+      const execAsync = promisify(exec);
+
+      // AppleScript to open Messages with file attached
+      const script = `
+        tell application "Messages"
+          activate
+          -- This will open Messages app where user can select a contact
+          -- and the file will be ready to attach
+        end tell
+
+        tell application "System Events"
+          tell process "Messages"
+            -- Wait for Messages to open
+            delay 0.5
+            -- Simulate Cmd+N to start new message
+            keystroke "n" using {command down}
+            delay 0.3
+          end tell
+        end tell
+      `;
+
+      try {
+        await execAsync(`osascript -e '${script.replace(/'/g, "\\'")}'`);
+
+        // After opening Messages, try to attach the file
+        const attachScript = `
+          tell application "System Events"
+            tell process "Messages"
+              delay 0.5
+              -- Try to drag/attach file (user can also manually drag it)
+              keystroke "a" using {command down}
+              delay 0.3
+            end tell
+          end tell
+        `;
+
+        // This opens the attachment picker
+        await execAsync(`osascript -e '${attachScript.replace(/'/g, "\\'")}'`);
+
+        return { success: true };
+      } catch (error) {
+        console.error('❌ Messages AppleScript failed:', error);
+        // Fallback: just open Messages app
+        await execAsync('open -a Messages');
+        return { success: true, fallback: true };
+      }
+    } else {
+      return { success: false, error: 'Messages integration only available on macOS' };
+    }
+  } catch (error) {
+    console.error('❌ Failed to send via Messages:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to send via Messages',
+    };
+  }
+});
+
+/**
+ * Show native macOS share sheet for a file
+ */
+ipcMain.handle('shell:share-item', async (_event, fullPath: string) => {
+  try {
+    console.log('🔗 Sharing item:', fullPath);
+
+    if (process.platform === 'darwin') {
+      // Use AppleScript to trigger the native macOS share menu
+      const { exec } = await import('child_process');
+      const { promisify } = await import('util');
+      const execAsync = promisify(exec);
+
+      // Escape the file path for AppleScript
+      const escapedPath = fullPath.replace(/"/g, '\\"');
+
+      // AppleScript to open Finder, select the file, and trigger share menu
+      // Uses Finder's menu bar Share menu for most reliable access
+      const script = `
+        tell application "Finder"
+          activate
+          set theFile to POSIX file "${escapedPath}" as alias
+          reveal theFile
+          select theFile
+        end tell
+
+        delay 0.4
+
+        tell application "System Events"
+          tell process "Finder"
+            -- Click on File menu in menu bar
+            click menu bar item "File" of menu bar 1
+            delay 0.2
+
+            -- Click on Share submenu
+            try
+              click menu item "Share" of menu "File" of menu bar item "File" of menu bar 1
+            on error errMsg
+              -- Try alternative path for different macOS versions
+              try
+                click menu item "Share" of menu 1 of menu bar item "File" of menu bar 1
+              end try
+            end try
+          end tell
+        end tell
+      `;
+
+      try {
+        await execAsync(`osascript -e '${script.replace(/'/g, "\\'")}'`);
+        return { success: true };
+      } catch (error) {
+        console.error('❌ AppleScript failed, falling back to Finder:', error);
+        // Fallback: just show in Finder so user can manually share
+        shell.showItemInFolder(fullPath);
+        return { success: true, fallback: true };
+      }
+    } else {
+      // On other platforms, just show in file manager
+      shell.showItemInFolder(fullPath);
+      return { success: true };
+    }
+  } catch (error) {
+    console.error('❌ Failed to share item:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to share item',
+    };
+  }
+});

@@ -55,6 +55,17 @@ interface ElectronAPI {
     openExternal: (url: string) => Promise<void>;
   };
 
+  // Shell operations
+  shell: {
+    showItemInFolder: (fullPath: string) => Promise<void>;
+    shareItem: (
+      fullPath: string
+    ) => Promise<{ success: boolean; fallback?: boolean; error?: string }>;
+    sendViaMessages: (
+      fullPath: string
+    ) => Promise<{ success: boolean; fallback?: boolean; error?: string }>;
+  };
+
   // Extraction
   extract: {
     region: (
@@ -178,6 +189,13 @@ const electronAPI: ElectronAPI = {
   system: {
     platform: process.platform,
     openExternal: (url: string) => ipcRenderer.invoke('system:open-external', url),
+  },
+
+  shell: {
+    showItemInFolder: (fullPath: string) =>
+      ipcRenderer.invoke('shell:show-item-in-folder', fullPath),
+    shareItem: (fullPath: string) => ipcRenderer.invoke('shell:share-item', fullPath),
+    sendViaMessages: (fullPath: string) => ipcRenderer.invoke('shell:send-via-messages', fullPath),
   },
 
   extract: {

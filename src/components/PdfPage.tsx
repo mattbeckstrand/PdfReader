@@ -3,6 +3,7 @@ import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { captureCanvasRegion } from '../lib/utils';
 import type { BoundingBox, RegionSelection } from '../types';
+import { HighlightOverlay, type HighlightData } from './HighlightOverlay';
 
 // ===================================================================
 // Component Props Interface
@@ -16,6 +17,12 @@ interface PdfPageProps {
   onVisibilityChange?: (pageNum: number, isVisible: boolean) => void;
   onCanvasReady?: (pageNum: number, canvas: HTMLCanvasElement | null, scaleFactor?: number) => void;
   onRegionSelected?: (selection: RegionSelection) => void;
+  highlights?: HighlightData[];
+  onRemoveHighlight?: (id: string) => void;
+  highlightModeActive?: boolean;
+  highlightColor?: string;
+  onTextHighlight?: (highlight: Omit<HighlightData, 'id' | 'timestamp'>) => void;
+  zoom?: number;
 }
 
 // ===================================================================
@@ -65,6 +72,12 @@ const PdfPage: React.FC<PdfPageProps> = ({
   onVisibilityChange,
   onCanvasReady,
   onRegionSelected,
+  highlights = [],
+  onRemoveHighlight,
+  highlightModeActive = false,
+  highlightColor = 'yellow',
+  onTextHighlight,
+  zoom = 1,
 }) => {
   // ===================================================================
   // Refs
@@ -318,6 +331,73 @@ const PdfPage: React.FC<PdfPageProps> = ({
     };
   }, [pageNumber, onCanvasReady]);
 
+  /**
+   * Handle automatic text highlighting when in highlight mode
+   */
+  useEffect(() => {
+    if (!highlightModeActive || !textLayerRef.current || !onTextHighlight) return;
+
+    const handleMouseUp = () => {
+      const selection = window.getSelection();
+      if (!selection || selection.rangeCount === 0 || selection.toString().trim().length === 0) {
+        return;
+      }
+
+      // Get the selected text and its bounding rectangles
+      const range = selection.getRangeAt(0);
+      const rects = Array.from(range.getClientRects());
+      const text = selection.toString().trim();
+
+      // Convert client rects to page-relative coordinates and filter out artifacts
+      const pageRect = pageContainerRef.current?.getBoundingClientRect();
+      const MIN_RECT_WIDTH = 2; // Minimum width in pixels (filters out line breaks and empty fragments)
+      const MIN_RECT_HEIGHT = 4; // Minimum height in pixels
+
+      const relativeRects = rects
+        .filter(rect => {
+          // Filter out tiny rectangles that are layout artifacts
+          // These are often line breaks, empty spans, or container boxes
+          return rect.width >= MIN_RECT_WIDTH && rect.height >= MIN_RECT_HEIGHT;
+        })
+        .map(rect => {
+          const relativeX = pageRect ? (rect.left - pageRect.left) / zoom : rect.left / zoom;
+          const relativeY = pageRect ? (rect.top - pageRect.top) / zoom : rect.top / zoom;
+
+          return {
+            x: relativeX,
+            y: relativeY,
+            width: rect.width / zoom,
+            height: rect.height / zoom,
+          };
+        });
+
+      // Only add highlight if we have valid rectangles
+      if (relativeRects.length === 0) {
+        console.warn('No valid rectangles found for selection');
+        selection.removeAllRanges();
+        return;
+      }
+
+      // Add the highlight
+      onTextHighlight({
+        pageNumber,
+        color: highlightColor as any,
+        text,
+        rects: relativeRects,
+      });
+
+      // Clear selection
+      selection.removeAllRanges();
+    };
+
+    const textLayer = textLayerRef.current;
+    textLayer.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      textLayer.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [highlightModeActive, pageNumber, highlightColor, onTextHighlight, zoom]);
+
   // ===================================================================
   // Render
   // ===================================================================
@@ -384,117 +464,132 @@ const PdfPage: React.FC<PdfPageProps> = ({
       {/* Text layer for selection (transparent overlay) */}
       <div
         ref={textLayerRef}
-        className="textLayer"
+        className={`textLayer ${highlightModeActive ? 'highlight-active' : ''}`}
         style={{
           display: isRendered ? 'block' : 'none',
         }}
       />
 
-      {/* Selection overlay for region box drawing */}
-      <div
-        ref={selectionOverlayRef}
-        style={{
-          position: 'absolute',
-          left: 0,
-          top: 0,
-          right: 0,
-          bottom: 0,
-          display: isRendered ? 'block' : 'none',
-          cursor: 'crosshair',
-          zIndex: 3,
-        }}
-        onMouseDown={e => {
-          if (!selectionOverlayRef.current) return;
-          isDraggingRef.current = true;
-          const rect = selectionOverlayRef.current.getBoundingClientRect();
-          const startX = e.clientX - rect.left;
-          const startY = e.clientY - rect.top;
-          dragStartRef.current = { x: startX, y: startY };
-          setSelectionBox({ x: startX, y: startY, width: 0, height: 0 });
-        }}
-        onMouseMove={e => {
-          if (!isDraggingRef.current || !selectionOverlayRef.current || !dragStartRef.current)
-            return;
-          const rect = selectionOverlayRef.current.getBoundingClientRect();
-          const currentX = e.clientX - rect.left;
-          const currentY = e.clientY - rect.top;
-          const startX = dragStartRef.current.x;
-          const startY = dragStartRef.current.y;
-          const x = Math.min(startX, currentX);
-          const y = Math.min(startY, currentY);
-          const width = Math.abs(currentX - startX);
-          const height = Math.abs(currentY - startY);
-          setSelectionBox({ x, y, width, height });
-        }}
-        onMouseUp={() => {
-          if (!isDraggingRef.current || !selectionOverlayRef.current || !dragStartRef.current)
-            return;
-          isDraggingRef.current = false;
-          const box = selectionBox;
-          setTimeout(() => setSelectionBox(null), 0);
-          dragStartRef.current = null;
+      {/* Highlight overlay */}
+      {isRendered && pageHeight && (
+        <HighlightOverlay
+          highlights={highlights}
+          pageNumber={pageNumber}
+          containerWidth={containerWidth}
+          containerHeight={pageHeight}
+          onRemoveHighlight={onRemoveHighlight}
+        />
+      )}
 
-          if (box && scaleFactor && onRegionSelected && canvasRef.current) {
-            const cssBox = { ...box, x2: box.x + box.width, y2: box.y + box.height };
-            const inv = 1 / scaleFactor;
-            const pdfBox = {
-              x: box.x * inv,
-              y: box.y * inv,
-              width: box.width * inv,
-              height: box.height * inv,
-              x2: (box.x + box.width) * inv,
-              y2: (box.y + box.height) * inv,
-            };
-
-            // Capture screenshot of the selected region for multimodal AI
-            const imageBase64 = captureCanvasRegion(
-              canvasRef.current,
-              box,
-              window.devicePixelRatio || 1
-            );
-
-            const selection: RegionSelection = {
-              pageNumber,
-              css: cssBox,
-              pdf: pdfBox,
-              scaleFactor,
-              timestamp: Date.now(),
-              imageBase64: imageBase64 || undefined,
-            };
-
-            if (imageBase64) {
-              console.log(
-                `📸 Captured screenshot for AI: ${Math.round(imageBase64.length / 1024)}KB`
-              );
-            }
-
-            onRegionSelected(selection);
-          }
-        }}
-        onMouseLeave={() => {
-          if (isDraggingRef.current) {
+      {/* Selection overlay for region box drawing - only active when NOT in highlight mode */}
+      {!highlightModeActive && (
+        <div
+          ref={selectionOverlayRef}
+          style={{
+            position: 'absolute',
+            left: 0,
+            top: 0,
+            right: 0,
+            bottom: 0,
+            display: isRendered ? 'block' : 'none',
+            cursor: 'crosshair',
+            zIndex: 3,
+          }}
+          onMouseDown={e => {
+            if (!selectionOverlayRef.current) return;
+            isDraggingRef.current = true;
+            const rect = selectionOverlayRef.current.getBoundingClientRect();
+            // Account for zoom: divide by zoom to get actual page coordinates
+            const startX = (e.clientX - rect.left) / zoom;
+            const startY = (e.clientY - rect.top) / zoom;
+            dragStartRef.current = { x: startX, y: startY };
+            setSelectionBox({ x: startX, y: startY, width: 0, height: 0 });
+          }}
+          onMouseMove={e => {
+            if (!isDraggingRef.current || !selectionOverlayRef.current || !dragStartRef.current)
+              return;
+            const rect = selectionOverlayRef.current.getBoundingClientRect();
+            // Account for zoom: divide by zoom to get actual page coordinates
+            const currentX = (e.clientX - rect.left) / zoom;
+            const currentY = (e.clientY - rect.top) / zoom;
+            const startX = dragStartRef.current.x;
+            const startY = dragStartRef.current.y;
+            const x = Math.min(startX, currentX);
+            const y = Math.min(startY, currentY);
+            const width = Math.abs(currentX - startX);
+            const height = Math.abs(currentY - startY);
+            setSelectionBox({ x, y, width, height });
+          }}
+          onMouseUp={() => {
+            if (!isDraggingRef.current || !selectionOverlayRef.current || !dragStartRef.current)
+              return;
             isDraggingRef.current = false;
-            setSelectionBox(null);
+            const box = selectionBox;
+            setTimeout(() => setSelectionBox(null), 0);
             dragStartRef.current = null;
-          }
-        }}
-      >
-        {selectionBox && (
-          <div
-            style={{
-              position: 'absolute',
-              left: `${selectionBox.x}px`,
-              top: `${selectionBox.y}px`,
-              width: `${selectionBox.width}px`,
-              height: `${selectionBox.height}px`,
-              border: '1px solid rgba(0, 122, 255, 0.9)',
-              background: 'rgba(0, 122, 255, 0.15)',
-              borderRadius: '2px',
-              pointerEvents: 'none',
-            }}
-          />
-        )}
-      </div>
+
+            if (box && scaleFactor && onRegionSelected && canvasRef.current) {
+              const cssBox = { ...box, x2: box.x + box.width, y2: box.y + box.height };
+              const inv = 1 / scaleFactor;
+              const pdfBox = {
+                x: box.x * inv,
+                y: box.y * inv,
+                width: box.width * inv,
+                height: box.height * inv,
+                x2: (box.x + box.width) * inv,
+                y2: (box.y + box.height) * inv,
+              };
+
+              // Capture screenshot of the selected region for multimodal AI
+              const imageBase64 = captureCanvasRegion(
+                canvasRef.current,
+                box,
+                window.devicePixelRatio || 1
+              );
+
+              const selection: RegionSelection = {
+                pageNumber,
+                css: cssBox,
+                pdf: pdfBox,
+                scaleFactor,
+                timestamp: Date.now(),
+                imageBase64: imageBase64 || undefined,
+              };
+
+              if (imageBase64) {
+                console.log(
+                  `📸 Captured screenshot for AI: ${Math.round(imageBase64.length / 1024)}KB`
+                );
+              }
+
+              onRegionSelected(selection);
+            }
+          }}
+          onMouseLeave={() => {
+            if (isDraggingRef.current) {
+              isDraggingRef.current = false;
+              setSelectionBox(null);
+              dragStartRef.current = null;
+            }
+          }}
+        >
+          {selectionBox && (
+            <div
+              style={{
+                position: 'absolute',
+                left: `${selectionBox.x}px`,
+                top: `${selectionBox.y}px`,
+                width: `${selectionBox.width}px`,
+                height: `${selectionBox.height}px`,
+                border: '1px solid rgba(0, 122, 255, 0.9)',
+                background: 'rgba(0, 122, 255, 0.15)',
+                borderRadius: '2px',
+                pointerEvents: 'none',
+              }}
+            />
+          )}
+        </div>
+      )}
     </div>
   );
 };

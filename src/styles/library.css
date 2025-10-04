@@ -8,6 +8,15 @@
 .library-cta {
   white-space: nowrap;
 }
+
+/* Ensure clean section titles with no artifacts */
+.section-title,
+.section-title * {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background-image: none;
+  border-image: none;
+}
 .sort-select {
   padding: 14px 40px 14px 16px;
   background: var(--surface-2);
@@ -20,7 +29,6 @@
   background-position: right 14px center;
   transition: background var(--transition), border-color var(--transition);
   position: relative;
-  z-index: 1; /* keep above adjacent search */
 }
 
 /* Dark mode dropdown arrow */
@@ -38,20 +46,6 @@
   box-shadow: var(--ring);
   border-color: var(--stroke-2);
   z-index: 2;
-}
-
-.section-title {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  color: var(--text-2);
-  margin: 0 0 18px 0;
-}
-.section-title h2 {
-  margin: 0;
-  font-size: 16px;
-  color: var(--text-1);
-  font-weight: 600;
 }
 
 .fav-badge {
